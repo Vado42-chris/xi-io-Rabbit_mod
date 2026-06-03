@@ -3,3 +3,4 @@ key.pem
 cert.pem
 .DS_Store
 .vscode/
+data/

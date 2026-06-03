@@ -24,6 +24,110 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Path to tasks storage
 const TASKS_FILE = path.join(__dirname, 'tasks.json');
+const DIAGNOSTICS_FILE = path.join(__dirname, 'data', 'diagnostics.jsonl');
+const LEDGER_FILE = path.join(__dirname, 'data', 'events.jsonl');
+
+function ensureDirectoryExists(filePath) {
+  const dir = path.dirname(filePath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+}
+
+// Ensure data folder exists
+ensureDirectoryExists(DIAGNOSTICS_FILE);
+
+// Helpers for Recording Diagnostics and Ledger Events
+function recordDiagnostic(severity, source, code, message, detail, suggestedAction, relatedFeature) {
+  const event = {
+    id: `diag_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    timestamp: new Date().toISOString(),
+    severity,
+    source,
+    code,
+    message,
+    detail: detail || '',
+    suggestedAction: suggestedAction || '',
+    relatedFeature: relatedFeature || ''
+  };
+
+  ensureDirectoryExists(DIAGNOSTICS_FILE);
+  try {
+    fs.appendFileSync(DIAGNOSTICS_FILE, JSON.stringify(event) + '\n');
+  } catch (err) {
+    console.error("Failed to write to diagnostics.jsonl:", err);
+  }
+
+  if (typeof io !== 'undefined') {
+    io.emit('diagnostic-event', event);
+  }
+
+  // Also emit as a ledger event, avoiding infinite recursion by not calling recordDiagnostic inside recordLedgerEvent
+  recordLedgerEvent('diagnostic.recorded', { diagnosticId: event.id, code: event.code, severity: event.severity });
+
+  return event;
+}
+
+function recordLedgerEvent(type, payload = {}) {
+  const event = {
+    id: `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    timestamp: new Date().toISOString(),
+    type,
+    payload
+  };
+
+  ensureDirectoryExists(LEDGER_FILE);
+  try {
+    fs.appendFileSync(LEDGER_FILE, JSON.stringify(event) + '\n');
+  } catch (err) {
+    console.error("Failed to write to events.jsonl:", err);
+  }
+
+  if (typeof io !== 'undefined') {
+    io.emit('ledger-event', event);
+  }
+  return event;
+}
+
+// Model Capability Router classification helper
+function classifyModelCapabilities(modelName) {
+  const name = modelName.toLowerCase();
+  const caps = [];
+
+  if (name.includes('llava') || name.includes('vision') || name.includes('moondream') || name.includes('bakllava') || name.includes('minicpm')) {
+    caps.push('vision');
+  }
+
+  if (name.includes('coder') || name.includes('codellama') || name.includes('deepseek-coder') || name.includes('code')) {
+    caps.push('code');
+  }
+
+  if (name.includes('embed') || name.includes('minilm') || name.includes('mxbai-embed')) {
+    caps.push('embedding');
+  }
+
+  if (
+    (name.includes('llama3') || name.includes('qwen2.5') || name.includes('mistral') || name.includes('command-r')) &&
+    !caps.includes('embedding')
+  ) {
+    caps.push('tools');
+  }
+
+  if (!caps.includes('embedding') && (
+    name.includes('llama') || name.includes('phi') || name.includes('gemma') ||
+    name.includes('mistral') || name.includes('qwen') || name.includes('command') ||
+    name.includes('chat') || name.includes('instruct') || name.includes('deepseek') ||
+    caps.includes('vision') || caps.includes('code')
+  )) {
+    caps.push('chat');
+  }
+
+  if (caps.length === 0) {
+    caps.push('unknown');
+  }
+
+  return caps;
+}
 
 // Initialize tasks.json if it doesn't exist
 if (!fs.existsSync(TASKS_FILE)) {
@@ -32,7 +136,11 @@ if (!fs.existsSync(TASKS_FILE)) {
     { id: 2, id_raw: "task-2", text: "Integrate retro emulator shell components", completed: true, project: "xi-io.net" },
     { id: 3, text: "Verify local Ollama offline assistant capabilities", completed: false, project: "xi-io.net" }
   ];
-  fs.writeFileSync(TASKS_FILE, JSON.stringify(initialTasks, null, 2));
+  try {
+    fs.writeFileSync(TASKS_FILE, JSON.stringify(initialTasks, null, 2));
+  } catch (err) {
+    console.error("Failed to initialize tasks.json:", err);
+  }
 }
 
 // Helpers for reading/writing tasks
@@ -42,6 +150,15 @@ function readTasks() {
     return JSON.parse(data);
   } catch (err) {
     console.error("Error reading tasks:", err);
+    recordDiagnostic(
+      'error',
+      'server.fs',
+      'TASK_PERSISTENCE_FAILED',
+      'Failed to read tasks database file.',
+      err.message,
+      'Ensure the directory has read permissions and that tasks.json is valid JSON.',
+      'tasks'
+    );
     return [];
   }
 }
@@ -51,14 +168,53 @@ function writeTasks(tasks) {
     fs.writeFileSync(TASKS_FILE, JSON.stringify(tasks, null, 2));
   } catch (err) {
     console.error("Error writing tasks:", err);
+    recordDiagnostic(
+      'error',
+      'server.fs',
+      'TASK_PERSISTENCE_FAILED',
+      'Failed to write tasks database updates to disk.',
+      err.message,
+      'Check system write permissions and disk space availability.',
+      'tasks'
+    );
   }
 }
 
-// SSL Options (from generated key/cert)
-const sslOptions = {
-  key: fs.readFileSync(path.join(__dirname, 'key.pem')),
-  cert: fs.readFileSync(path.join(__dirname, 'cert.pem'))
-};
+// SSL Options (with robust validation)
+let sslOptions;
+try {
+  const keyPath = path.join(__dirname, 'key.pem');
+  const certPath = path.join(__dirname, 'cert.pem');
+
+  if (!fs.existsSync(keyPath) || !fs.existsSync(certPath)) {
+    throw new Error("SSL Certificate files (key.pem/cert.pem) are missing.");
+  }
+
+  sslOptions = {
+    key: fs.readFileSync(keyPath),
+    cert: fs.readFileSync(certPath)
+  };
+} catch (err) {
+  console.error("CRITICAL SSL INITIALIZATION ERROR:", err.message);
+
+  // Write fatal diagnostic event directly to disk
+  const event = {
+    id: `diag_${Date.now()}_startup`,
+    timestamp: new Date().toISOString(),
+    severity: 'fatal',
+    source: 'server',
+    code: 'SSL_CERT_ERROR',
+    message: 'SSL certificates missing or invalid.',
+    detail: err.message,
+    suggestedAction: 'Run `npm run cert` in the project directory to generate localhost self-signed SSL certificates.',
+    relatedFeature: 'server'
+  };
+
+  ensureDirectoryExists(DIAGNOSTICS_FILE);
+  fs.appendFileSync(DIAGNOSTICS_FILE, JSON.stringify(event) + '\n');
+
+  process.exit(1);
+}
 
 // Create HTTPS Server
 const server = https.createServer(sslOptions, app);
@@ -72,11 +228,10 @@ const io = new Server(server, {
 // HTTP REST Routes
 app.get('/api/ping', (req, res) => {
   res.json({ status: 'ok', time: new Date() });
-});
-
-// Socket.io Connection Logic
+});// Socket.io Connection Logic
 io.on('connection', (socket) => {
   console.log(`Client connected: ${socket.id}`);
+  recordLedgerEvent('socket.connect', { socketId: socket.id });
 
   // Send initial tasks to client
   socket.emit('tasks', readTasks());
@@ -86,12 +241,35 @@ io.on('connection', (socket) => {
     try {
       console.log("Fetching local models from Ollama...");
       const response = await fetch(`${OLLAMA_HOST}/api/tags`);
-      if (!response.ok) throw new Error(`Ollama HTTP error ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`Ollama HTTP error ${response.status}: ${response.statusText}`);
+      }
       const data = await response.json();
-      const models = data.models ? data.models.map(m => m.name) : [];
+      const models = data.models ? data.models.map(m => {
+        return {
+          name: m.name,
+          capabilities: classifyModelCapabilities(m.name)
+        };
+      }) : [];
       socket.emit('models-list', models);
+      recordLedgerEvent('model.listed', { count: models.length, models: models.map(m => m.name) });
     } catch (err) {
       console.error("Failed to connect to Ollama:", err.message);
+      const isConnectionError = err.message.includes('ECONNREFUSED') || err.message.includes('fetch failed');
+      const code = isConnectionError ? 'OLLAMA_OFFLINE' : 'OLLAMA_LIST_FAILED';
+      const message = isConnectionError
+        ? 'Ollama AI server is offline or unreachable.'
+        : 'Failed to retrieve model list from Ollama server.';
+
+      recordDiagnostic(
+        'error',
+        'server.ollama',
+        code,
+        message,
+        err.message,
+        'Verify that Ollama is running locally at http://localhost:11434.',
+        'telemetry'
+      );
       socket.emit('models-list', []);
     }
   });
@@ -103,7 +281,7 @@ io.on('connection', (socket) => {
     const usedMem = totalMem - freeMem;
     const cpuLoad = os.loadavg();
     const uptime = os.uptime();
-    
+
     socket.emit('system-stats', {
       memory: {
         total: totalMem,
@@ -124,6 +302,8 @@ io.on('connection', (socket) => {
   socket.on('pull-model', async (modelName) => {
     if (!modelName || typeof modelName !== 'string') return;
     console.log(`Pulling model: ${modelName}`);
+    recordLedgerEvent('model.pull.started', { model: modelName });
+
     try {
       const response = await fetch(`${OLLAMA_HOST}/api/pull`, {
         method: 'POST',
@@ -157,16 +337,34 @@ io.on('connection', (socket) => {
           }
         }
       }
-      
+
       socket.emit('pull-progress', { status: 'success' });
-      
+      recordLedgerEvent('model.pull.completed', { model: modelName });
+
       // Update models list and broadcast to all
       const responseList = await fetch(`${OLLAMA_HOST}/api/tags`);
-      const data = await responseList.json();
-      const models = data.models ? data.models.map(m => m.name) : [];
-      io.emit('models-list', models);
+      if (responseList.ok) {
+        const data = await responseList.json();
+        const models = data.models ? data.models.map(m => {
+          return {
+            name: m.name,
+            capabilities: classifyModelCapabilities(m.name)
+          };
+        }) : [];
+        io.emit('models-list', models);
+      }
     } catch (err) {
       console.error(`Error pulling model ${modelName}:`, err);
+      recordDiagnostic(
+        'error',
+        'server.ollama',
+        'OLLAMA_PULL_FAILED',
+        `Failed to pull model '${modelName}' from Ollama registry.`,
+        err.message,
+        `Check your network connection and ensure model name '${modelName}' is spelled correctly on ollama.com.`,
+        'model-manager'
+      );
+      recordLedgerEvent('model.pull.failed', { model: modelName, error: err.message });
       socket.emit('pull-progress', { status: 'error', message: err.message });
     }
   });
@@ -190,6 +388,7 @@ io.on('connection', (socket) => {
     tasks.push(newTask);
     writeTasks(tasks);
     io.emit('tasks', tasks); // Broadcast update to all clients
+    recordLedgerEvent('task.created', { taskId: newTask.id, text: newTask.text });
     console.log(`Task created: "${newTask.text}"`);
   });
 
@@ -203,6 +402,7 @@ io.on('connection', (socket) => {
       tasks[taskIndex].status = tasks[taskIndex].completed ? 'done' : 'todo';
       writeTasks(tasks);
       io.emit('tasks', tasks); // Broadcast update
+      recordLedgerEvent('task.updated', { taskId: taskId, completed: tasks[taskIndex].completed });
       console.log(`Task ${taskId} completion toggled to ${tasks[taskIndex].completed}`);
     }
   });
@@ -216,6 +416,7 @@ io.on('connection', (socket) => {
       tasks[taskIndex].completed = (status === 'done');
       writeTasks(tasks);
       io.emit('tasks', tasks);
+      recordLedgerEvent('task.moved', { taskId: taskId, status: status });
       console.log(`Task ${taskId} status updated to ${status}`);
     }
   });
@@ -226,6 +427,7 @@ io.on('connection', (socket) => {
     tasks = tasks.filter(t => t.id !== taskId);
     writeTasks(tasks);
     io.emit('tasks', tasks);
+    recordLedgerEvent('task.deleted', { taskId: taskId });
     console.log(`Task ${taskId} deleted`);
   });
 
@@ -233,6 +435,8 @@ io.on('connection', (socket) => {
   socket.on('chat-prompt', async ({ prompt, model }) => {
     console.log(`Received prompt for model [${model}]: "${prompt}"`);
     if (!prompt) return;
+
+    recordLedgerEvent('ollama.chat.started', { model, promptLength: prompt.length });
 
     try {
       const response = await fetch(`${OLLAMA_HOST}/api/chat`, {
@@ -268,7 +472,7 @@ io.on('connection', (socket) => {
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');
-        
+
         // Keep the last partial line in the buffer
         buffer = lines.pop();
 
@@ -298,10 +502,21 @@ io.on('connection', (socket) => {
       }
 
       socket.emit('chat-done');
+      recordLedgerEvent('ollama.chat.completed', { model });
       console.log('Stream completed successfully.');
 
     } catch (err) {
       console.error("Error communicating with Ollama:", err);
+      recordDiagnostic(
+        'error',
+        'server.ollama',
+        'OLLAMA_CHAT_FAILED',
+        `Failed to generate response using model '${model}'.`,
+        err.message,
+        `Ensure Ollama is running and model '${model}' is pulled and functional.`,
+        'chat'
+      );
+      recordLedgerEvent('ollama.chat.failed', { model, error: err.message });
       socket.emit('chat-error', `AI Unavailable: Check that Ollama is running local model '${model}'`);
     }
   });
@@ -313,6 +528,8 @@ io.on('connection', (socket) => {
       socket.emit('chat-error', 'No image data provided.');
       return;
     }
+
+    recordLedgerEvent('ollama.chat.started', { model, type: 'vision', promptLength: prompt ? prompt.length : 0 });
 
     // Extract the raw base64 string (strip header if present)
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
@@ -364,15 +581,58 @@ io.on('connection', (socket) => {
       }
 
       socket.emit('chat-done');
+      recordLedgerEvent('ollama.chat.completed', { model, type: 'vision' });
       console.log('Vision stream completed.');
 
     } catch (err) {
       console.error("Error communicating with Ollama Vision:", err);
+      recordDiagnostic(
+        'error',
+        'server.ollama',
+        'OLLAMA_CHAT_FAILED',
+        `Failed to run vision analysis using model '${model}'.`,
+        err.message,
+        `Verify that vision model '${model}' is loaded and running on Ollama.`,
+        'vision'
+      );
+      recordLedgerEvent('ollama.chat.failed', { model, type: 'vision', error: err.message });
       socket.emit('chat-error', `Vision AI Unavailable: Ensure Ollama is running vision model '${model}'`);
     }
   });
-});
 
+  // Client Selection / Sensors Ledger Synchronizers
+  socket.on('model-selected', ({ name, capabilities }) => {
+    recordLedgerEvent('model.selected', { model: name, capabilities });
+  });
+
+  socket.on('voice-transcribed', ({ transcriptSummary }) => {
+    recordLedgerEvent('voice.transcribed', { summary: transcriptSummary });
+  });
+
+  socket.on('camera-frame-captured', () => {
+    recordLedgerEvent('camera.frame.captured');
+  });
+
+  socket.on('client-diagnostic', (event) => {
+    event.id = event.id || `diag_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    event.timestamp = event.timestamp || new Date().toISOString();
+
+    ensureDirectoryExists(DIAGNOSTICS_FILE);
+    try {
+      fs.appendFileSync(DIAGNOSTICS_FILE, JSON.stringify(event) + '\n');
+    } catch (err) {
+      console.error("Failed to write client diagnostic to disk:", err);
+    }
+
+    socket.broadcast.emit('diagnostic-event', event);
+    recordLedgerEvent('diagnostic.recorded', { diagnosticId: event.id, code: event.code, severity: event.severity, source: event.source });
+  });
+
+  socket.on('disconnect', () => {
+    console.log(`Client disconnected: ${socket.id}`);
+    recordLedgerEvent('socket.disconnect', { socketId: socket.id });
+  });
+});
 // Start Server
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`=================================================`);

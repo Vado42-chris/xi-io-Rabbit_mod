@@ -1086,3 +1086,91 @@ body {
     color: #ab47bc; /* Purple */
   }
 }
+
+/* Global Capabilities & Diagnostics Styles */
+.capabilities-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+.device-caps {
+  margin-top: 4px;
+  justify-content: flex-end;
+}
+.capability-badge {
+  font-size: 8px;
+  font-weight: 800;
+  padding: 2px 5px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  background-color: var(--color-bg-card);
+  border: 1px solid #303035;
+  color: var(--color-text-secondary);
+  display: inline-block;
+}
+.capability-badge.chat {
+  border-color: #29b6f6;
+  color: #29b6f6;
+  background-color: rgba(41, 182, 246, 0.1);
+}
+.capability-badge.code {
+  border-color: #ab47bc;
+  color: #ab47bc;
+  background-color: rgba(171, 71, 188, 0.1);
+}
+.capability-badge.vision {
+  border-color: #ff9100;
+  color: #ff9100;
+  background-color: rgba(255, 145, 0, 0.1);
+}
+.capability-badge.tools {
+  border-color: #00e676;
+  color: #00e676;
+  background-color: rgba(0, 230, 118, 0.1);
+}
+.capability-badge.embedding {
+  border-color: #f5f5f7;
+  color: #f5f5f7;
+  background-color: rgba(245, 245, 247, 0.1);
+}
+
+.health-pill {
+  font-size: 8px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 10px;
+  margin-left: 6px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  display: inline-block;
+}
+.health-pill.healthy {
+  color: var(--color-green);
+  background-color: rgba(0, 230, 118, 0.15);
+  border: 1px solid var(--color-green);
+}
+.health-pill.degraded {
+  color: #ff9100;
+  background-color: rgba(255, 145, 0, 0.15);
+  border: 1px solid #ff9100;
+}
+.health-pill.unhealthy {
+  color: var(--color-red);
+  background-color: rgba(255, 23, 68, 0.15);
+  border: 1px solid var(--color-red);
+}
+
+.log-entry.error {
+  color: #ff1744 !important;
+}
+.log-entry.warning {
+  color: #ff9100 !important;
+}
+.log-entry.success {
+  color: #00e676 !important;
+}
+.log-entry.ledger {
+  color: #90a4ae !important;
+  font-style: italic;
+}

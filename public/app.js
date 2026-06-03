@@ -4,9 +4,11 @@ const socket = io();
 // R1 Screen UI Elements
 const connDot = document.getElementById('conn-dot');
 const statusText = document.getElementById('status-text');
+const healthIndicator = document.getElementById('health-indicator');
 const screens = document.querySelectorAll('.screen');
 const navDots = document.querySelectorAll('.nav-dot');
 const modelSelect = document.getElementById('model-select');
+const modelCaps = document.getElementById('model-capabilities');
 const taskBadge = document.getElementById('task-badge');
 const tasksContainer = document.getElementById('tasks-scroll-container');
 const chatOutput = document.getElementById('chat-output');
@@ -34,6 +36,7 @@ const pullProgressContainer = document.getElementById('pull-progress-container')
 const pullProgressBar = document.getElementById('pull-progress-bar');
 const pullProgressText = document.getElementById('pull-progress-text');
 const desktopModelSelect = document.getElementById('desktop-model-select');
+const desktopModelCaps = document.getElementById('desktop-model-capabilities');
 
 const cardsTodo = document.getElementById('cards-todo');
 const cardsProgress = document.getElementById('cards-progress');
@@ -77,6 +80,45 @@ function logActivity(message, type = 'system') {
   logsContainer.scrollTop = logsContainer.scrollHeight;
 }
 
+// Health status indicator controller
+function updateHealthStatus(severity) {
+  if (!healthIndicator) return;
+  healthIndicator.className = 'health-pill';
+  if (severity === 'error') {
+    healthIndicator.classList.add('unhealthy');
+    healthIndicator.textContent = 'UNHEALTHY';
+  } else if (severity === 'warning') {
+    healthIndicator.classList.add('degraded');
+    healthIndicator.textContent = 'DEGRADED';
+  } else {
+    healthIndicator.classList.add('healthy');
+    healthIndicator.textContent = 'HEALTHY';
+  }
+}
+
+// Model capabilities rendering helper
+function renderModelCapabilities(modelName) {
+  if (!desktopModelCaps || !modelCaps) return;
+  desktopModelCaps.innerHTML = '';
+  modelCaps.innerHTML = '';
+
+  const modelObj = localModels.find(m => typeof m === 'object' && m.name === modelName);
+  const capabilities = modelObj ? modelObj.capabilities : [];
+
+  capabilities.forEach(cap => {
+    const badge1 = document.createElement('span');
+    badge1.className = `capability-badge ${cap}`;
+    badge1.textContent = cap;
+
+    const badge2 = document.createElement('span');
+    badge2.className = `capability-badge ${cap}`;
+    badge2.textContent = cap;
+
+    desktopModelCaps.appendChild(badge1);
+    modelCaps.appendChild(badge2);
+  });
+}
+
 if (SpeechRecognition) {
   recognition = new SpeechRecognition();
   recognition.continuous = false;
@@ -97,13 +139,25 @@ if (SpeechRecognition) {
     logActivity(`Speech recognized: "${transcript}"`, "user");
     chatOutput.textContent = `You: "${transcript}"\n\nAI: `;
     sendChatPrompt(transcript);
+    socket.emit('voice-transcribed', { transcriptSummary: transcript.substring(0, 60) });
   };
 
   recognition.onerror = (event) => {
     console.error("Speech recognition error:", event.error);
     chatOutput.textContent = `Speech Error: ${event.error}. Please try again.`;
-    logActivity(`Speech recognition error: ${event.error}`, "system");
+    logActivity(`Speech recognition error: ${event.error}`, "error");
     stopVisualizer();
+
+    // Emit client side audio error diagnostic
+    socket.emit('client-diagnostic', {
+      severity: 'warning',
+      source: 'client.audio',
+      code: 'AUDIO_REC_FAILED',
+      message: `Speech recognition error: ${event.error}`,
+      details: event.message || '',
+      remediation: 'Ensure browser microphone permissions are enabled.',
+      relatedFeature: 'chat'
+    });
   };
 
   recognition.onend = () => {
@@ -145,6 +199,7 @@ function stopVisualizer() {
 socket.on('connect', () => {
   connDot.className = 'dot connected';
   statusText.textContent = 'CONNECTED';
+  updateHealthStatus('info');
   logActivity("WebSocket connected to workstation.", "socket");
   socket.emit('get-models');
 });
@@ -152,7 +207,18 @@ socket.on('connect', () => {
 socket.on('disconnect', () => {
   connDot.className = 'dot disconnected';
   statusText.textContent = 'DISCONNECTED';
+  updateHealthStatus('error');
   logActivity("WebSocket disconnected.", "socket");
+});
+
+// Real-time diagnostics & ledger event stream integration
+socket.on('diagnostic-event', (diag) => {
+  logActivity(`[DIAG] [${diag.severity.toUpperCase()}] (${diag.code}) ${diag.message}`, diag.severity);
+  updateHealthStatus(diag.severity);
+});
+
+socket.on('ledger-event', (evt) => {
+  logActivity(`[LEDGER] ${evt.type}: ${JSON.stringify(evt.payload)}`, 'ledger');
 });
 
 // Update models list
@@ -161,35 +227,43 @@ socket.on('models-list', (models) => {
     localModels = models;
     modelSelect.innerHTML = '';
     desktopModelSelect.innerHTML = '';
-    
-    models.forEach(model => {
-      const opt1 = document.createElement('option');
-      opt1.value = model;
-      opt1.textContent = model;
-      
-      const opt2 = document.createElement('option');
-      opt2.value = model;
-      opt2.textContent = model;
 
-      // Default to llama3 or phi3 if found
-      if (model.includes('llama3') || model.includes('phi3') || model.includes('llava')) {
+    let defaultSelected = false;
+    models.forEach(modelObj => {
+      const modelName = modelObj.name;
+      const opt1 = document.createElement('option');
+      opt1.value = modelName;
+      opt1.textContent = modelName;
+
+      const opt2 = document.createElement('option');
+      opt2.value = modelName;
+      opt2.textContent = modelName;
+
+      // Default to llama3 or phi3 if found, or first one
+      if (modelName.includes('llama3') || modelName.includes('phi3') || modelName.includes('llava') || !defaultSelected) {
         opt1.selected = true;
         opt2.selected = true;
-        selectedModel = model;
+        selectedModel = modelName;
+        defaultSelected = true;
       }
       modelSelect.appendChild(opt1);
       desktopModelSelect.appendChild(opt2);
     });
-    
+
     ollamaStatus.textContent = 'ONLINE';
     ollamaStatus.style.color = 'var(--color-green)';
     activeModelDisplay.textContent = selectedModel;
-    logActivity(`Ollama tags loaded: ${models.join(', ')}`, "system");
+    renderModelCapabilities(selectedModel);
+    updateHealthStatus('info'); // Setting green/healthy as models are online
+
+    const names = models.map(m => m.name);
+    logActivity(`Ollama tags loaded: ${names.join(', ')}`, "system");
   } else {
     ollamaStatus.textContent = 'OFFLINE';
     ollamaStatus.style.color = 'var(--color-red)';
     activeModelDisplay.textContent = 'No models found';
-    logActivity("Ollama offline or no local models found.", "system");
+    updateHealthStatus('error');
+    logActivity("Ollama offline or no local models found.", "warning");
   }
 });
 
@@ -375,9 +449,9 @@ function showScreen(screenId) {
 function speakResponse(text) {
   if (!window.speechSynthesis) return;
   window.speechSynthesis.cancel();
-  
+
   speechUtterance = new SpeechSynthesisUtterance(text);
-  speechUtterance.rate = 1.05; 
+  speechUtterance.rate = 1.05;
   speechUtterance.pitch = 1.0;
   window.speechSynthesis.speak(speechUtterance);
 }
@@ -413,6 +487,17 @@ async function startCamera() {
     console.error("Camera access failed:", err);
     visionResult.classList.remove('hidden');
     visionResult.textContent = "Camera access denied. Ensure HTTPS context.";
+
+    // Emit client side camera error diagnostic
+    socket.emit('client-diagnostic', {
+      severity: 'error',
+      source: 'client.camera',
+      code: 'CAMERA_ACCESS_DENIED',
+      message: 'Camera access denied or unavailable.',
+      details: err.message || '',
+      remediation: 'Enable camera permissions for the site and use HTTPS.',
+      relatedFeature: 'vision'
+    });
   }
 }
 
@@ -427,24 +512,26 @@ function stopCamera() {
 // Scan/Capture frame
 function captureImageAndAnalyze() {
   if (!cameraStream) return;
-  
+
   const ctx = photoCanvas.getContext('2d');
   photoCanvas.width = 320;
   photoCanvas.height = 320;
-  
+
   // Draw current video frame
   ctx.drawImage(videoFeed, 0, 0, 320, 320);
   const base64Image = photoCanvas.toDataURL('image/jpeg');
-  
+
   visionResult.classList.remove('hidden');
   visionResult.textContent = "Sending image to Ollama...";
-  
+
   const visionModel = selectedModel.includes('llava') ? selectedModel : 'llava';
   socket.emit('vision-prompt', {
     prompt: "Scan this workspace layout or context. Provide a summary of details for xi-io.net project management.",
     imageBase64: base64Image,
     model: visionModel
   });
+
+  socket.emit('camera-frame-captured');
   logActivity(`Captured vision scan frame with model [${visionModel}]`, "system");
 }
 
@@ -474,6 +561,11 @@ modelSelect.addEventListener('change', (e) => {
   selectedModel = e.target.value;
   desktopModelSelect.value = selectedModel;
   activeModelDisplay.textContent = selectedModel;
+  renderModelCapabilities(selectedModel);
+
+  const modelObj = localModels.find(m => typeof m === 'object' && m.name === selectedModel);
+  const capabilities = modelObj ? modelObj.capabilities : [];
+  socket.emit('model-selected', { name: selectedModel, capabilities });
   logActivity(`Selected AI Model: ${selectedModel}`, "system");
 });
 
@@ -481,6 +573,11 @@ desktopModelSelect.addEventListener('change', (e) => {
   selectedModel = e.target.value;
   modelSelect.value = selectedModel;
   activeModelDisplay.textContent = selectedModel;
+  renderModelCapabilities(selectedModel);
+
+  const modelObj = localModels.find(m => typeof m === 'object' && m.name === selectedModel);
+  const capabilities = modelObj ? modelObj.capabilities : [];
+  socket.emit('model-selected', { name: selectedModel, capabilities });
   logActivity(`Selected AI Model: ${selectedModel}`, "system");
 });
 
@@ -660,7 +757,7 @@ window.addEventListener('keydown', (e) => {
 
   const isUp = (e.key === 'AudioVolumeUp' || e.key === 'ArrowUp');
   const isDown = (e.key === 'AudioVolumeDown' || e.key === 'ArrowDown');
-  const isSelect = (e.key === 'Enter' || e.key === ' ' || e.key === 'Select'); 
+  const isSelect = (e.key === 'Enter' || e.key === ' ' || e.key === 'Select');
 
   if (isUp || isDown || isSelect) {
     // Intercept to prevent default adjustments
@@ -668,7 +765,7 @@ window.addEventListener('keydown', (e) => {
 
     if (activeScreen === 'screen-dashboard') {
       const items = document.querySelectorAll('.menu-list .menu-item');
-      
+
       if (isUp) {
         items[currentMenuIndex].classList.remove('active');
         currentMenuIndex = (currentMenuIndex - 1 + items.length) % items.length;
@@ -683,8 +780,8 @@ window.addEventListener('keydown', (e) => {
         const targetScreen = items[currentMenuIndex].getAttribute('data-target');
         showScreen(targetScreen);
       }
-    } 
-    
+    }
+
     else if (activeScreen === 'screen-tasks') {
       const cards = document.querySelectorAll('.scroll-list .task-card');
       if (cards.length === 0) return;
