@@ -1,0 +1,35 @@
+[
+  {
+    "id": 1,
+    "text": "Design xi-io.net workspace dashboard",
+    "completed": false,
+    "project": "xi-io.net"
+  },
+  {
+    "id": 2,
+    "id_raw": "task-2",
+    "text": "Integrate retro emulator shell components",
+    "completed": true,
+    "project": "xi-io.net"
+  },
+  {
+    "id": 3,
+    "text": "Verify local Ollama offline assistant capabilities",
+    "completed": false,
+    "project": "xi-io.net"
+  },
+  {
+    "id": 1780506112583,
+    "text": "NewVerificationTask1",
+    "completed": false,
+    "status": "todo",
+    "project": "xi-io.net"
+  },
+  {
+    "id": 1780506172563,
+    "text": "New Verification Task 2",
+    "completed": false,
+    "status": "todo",
+    "project": "xi-io.net"
+  }
+]

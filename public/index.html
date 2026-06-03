@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>R1 Local Companion</title>
+  <!-- Google Fonts for Teenage Engineering Aesthetic -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=VT323&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="workspace">
+    <!-- LEFT PANE: Desktop Workspace Controls -->
+    <aside id="desktop-control-panel">
+      <!-- Telemetry & Ollama Status -->
+      <section class="panel-section telemetry-panel">
+        <h3>SYSTEM TELEMETRY & OLLAMA</h3>
+        <div class="telemetry-grid">
+          <div class="stat-card">
+            <span class="stat-label">CPU LOAD</span>
+            <span class="stat-value" id="cpu-value">--%</span>
+            <span class="stat-sub" id="cpu-detail">-- Cores</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">RAM USED</span>
+            <span class="stat-value" id="ram-value">--%</span>
+            <span class="stat-sub" id="ram-detail">-- / -- GB</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">SYSTEM UPTIME</span>
+            <span class="stat-value" id="uptime-value">--h</span>
+            <span class="stat-sub">Since Boot</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">OLLAMA STATUS</span>
+            <span class="stat-value" id="ollama-status">CHECKING</span>
+            <span class="stat-sub" id="active-model-display">No model loaded</span>
+          </div>
+        </div>
+        
+        <div class="model-manager">
+          <h4>Model Management</h4>
+          <div class="pull-input-group">
+            <input type="text" id="pull-model-input" placeholder="e.g. llama3" autocomplete="off">
+            <button id="pull-model-btn">PULL</button>
+          </div>
+          <div id="pull-progress-container" class="hidden">
+            <div class="progress-bar-wrapper">
+              <div id="pull-progress-bar" style="width: 0%"></div>
+            </div>
+            <span id="pull-progress-text">Pulling...</span>
+          </div>
+          <div class="available-models-box">
+            <label for="desktop-model-select">Active Model:</label>
+            <select id="desktop-model-select">
+              <option value="llama3">llama3 (Default)</option>
+              <option value="phi3">phi3</option>
+              <option value="llava">llava (Vision)</option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <!-- Kanban Board -->
+      <section class="panel-section kanban-panel">
+        <h3>PRODUCTIVITY KANBAN</h3>
+        <div class="kanban-board">
+          <div class="kanban-column" id="col-todo" data-status="todo">
+            <div class="column-header">TODO</div>
+            <div class="column-cards" id="cards-todo"></div>
+          </div>
+          <div class="kanban-column" id="col-progress" data-status="progress">
+            <div class="column-header">IN PROGRESS</div>
+            <div class="column-cards" id="cards-progress"></div>
+          </div>
+          <div class="kanban-column" id="col-done" data-status="done">
+            <div class="column-header">DONE</div>
+            <div class="column-cards" id="cards-done"></div>
+          </div>
+        </div>
+        <div class="kanban-actions">
+          <input type="text" id="kanban-new-task" placeholder="Add task to Kanban..." autocomplete="off">
+          <button id="kanban-add-btn">Add Task</button>
+        </div>
+      </section>
+
+      <!-- Activity logs / Terminal console -->
+      <section class="panel-section logs-panel">
+        <h3>REAL-TIME SERVICE LOGS</h3>
+        <div id="logs-container" class="terminal-text">
+          <div class="log-entry system">System initialized. Ready for connections.</div>
+        </div>
+      </section>
+    </aside>
+
+    <!-- RIGHT PANE: Interactive R1 Hardware Chassis -->
+    <section id="hardware-simulator">
+      <!-- Physical PTT button on the left of R1 frame -->
+      <div id="physical-ptt" class="hardware-button" title="Hold to talk (PTT)"></div>
+      
+      <div id="r1-chassis">
+        <!-- Top Scroll Wheel & Camera Eye area -->
+        <div class="r1-header-hardware">
+          <!-- Rotatable Camera Eye -->
+          <div id="r1-camera-eye" class="camera-eye" title="Rotate Camera Eye">
+            <div class="lens"></div>
+          </div>
+          
+          <!-- Scroll Wheel -->
+          <div class="scroll-wheel-wrapper">
+            <button class="scroll-wheel-btn scroll-up" id="wheel-up-btn" title="Scroll Up">▲</button>
+            <div id="r1-scroll-wheel" class="scroll-wheel" title="Interactive Scroll Wheel">
+              <div id="r1-scroll-ridges" class="scroll-ridges"></div>
+            </div>
+            <button class="scroll-wheel-btn scroll-down" id="wheel-down-btn" title="Scroll Down">▼</button>
+          </div>
+        </div>
+
+        <!-- Screen Container -->
+        <div id="r1-screen-container">
+          <div id="app-container">
+            <!-- Header -->
+            <header class="app-header">
+              <div class="logo">R1.local</div>
+              <div class="status-indicator">
+                <span id="conn-dot" class="dot disconnected"></span>
+                <span id="status-text">DISCONNECTED</span>
+              </div>
+            </header>
+
+            <!-- Main Viewport (320x320 boundary active inside container) -->
+            <main id="viewport">
+              <!-- Screen 1: Dashboard -->
+              <section id="screen-dashboard" class="screen active">
+                <div class="project-pill">PROJECT: xi-io.net</div>
+                
+                <div class="menu-list">
+                  <div class="menu-item active" data-target="screen-chat" id="menu-chat">
+                    <span class="menu-icon">🎙️</span>
+                    <span class="menu-label">Voice Assistant</span>
+                  </div>
+                  <div class="menu-item" data-target="screen-tasks" id="menu-tasks">
+                    <span class="menu-icon">📋</span>
+                    <span class="menu-label">Project Tasks</span>
+                    <span class="badge" id="task-badge">0</span>
+                  </div>
+                  <div class="menu-item" data-target="screen-camera" id="menu-camera">
+                    <span class="menu-icon">📷</span>
+                    <span class="menu-label">Vision Scan</span>
+                  </div>
+                </div>
+
+                <div class="settings-box">
+                  <label for="model-select">AI MODEL:</label>
+                  <select id="model-select">
+                    <option value="llama3">llama3 (Default)</option>
+                    <option value="phi3">phi3</option>
+                    <option value="llava">llava (Vision)</option>
+                  </select>
+                </div>
+              </section>
+
+              <!-- Screen 2: Task List (Productivity) -->
+              <section id="screen-tasks" class="screen">
+                <div class="screen-header">
+                  <button class="back-btn" data-target="screen-dashboard">← BACK</button>
+                  <h2>XI-IO.NET TASKS</h2>
+                </div>
+                <div id="tasks-scroll-container" class="scroll-list">
+                  <!-- Dynamically populated tasks -->
+                  <div class="loading-text">Loading workspace...</div>
+                </div>
+                <div class="task-input-bar">
+                  <input type="text" id="new-task-input" placeholder="New task..." autocomplete="off">
+                  <button id="add-task-btn">+</button>
+                </div>
+              </section>
+
+              <!-- Screen 3: AI Chat/Voice Assistant -->
+              <section id="screen-chat" class="screen">
+                <div class="screen-header">
+                  <button class="back-btn" data-target="screen-dashboard">← BACK</button>
+                  <h2>ASSISTANT</h2>
+                </div>
+                
+                <div id="chat-output" class="terminal-text">
+                  Ready for prompt. Press and hold PTT below, or use physical keys.
+                </div>
+
+                <div class="voice-controls">
+                  <div id="visualizer-container">
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                  </div>
+                  <button id="ptt-btn" class="ptt-trigger">PUSH TO TALK</button>
+                  <div class="ptt-hint">Or hold Spacebar / Volume keys</div>
+                </div>
+              </section>
+
+              <!-- Screen 4: Vision Scan -->
+              <section id="screen-camera" class="screen">
+                <div class="screen-header">
+                  <button class="back-btn" data-target="screen-dashboard">← BACK</button>
+                  <h2>VISION SCAN</h2>
+                </div>
+
+                <div class="camera-viewport">
+                  <video id="camera-feed" autoplay playsinline></video>
+                  <canvas id="photo-canvas" style="display: none;"></canvas>
+                  <div id="vision-overlay" class="vision-scanline"></div>
+                </div>
+
+                <div class="camera-controls">
+                  <button id="capture-btn">SCAN IMAGE</button>
+                </div>
+
+                <div id="vision-result" class="terminal-text hidden">
+                  Waiting for capture...
+                </div>
+              </section>
+            </main>
+
+            <!-- Footer Page Indicator Dot Navigation -->
+            <footer class="app-footer">
+              <div class="navigation-dots">
+                <span class="nav-dot active" data-screen="screen-dashboard"></span>
+                <span class="nav-dot" data-screen="screen-chat"></span>
+                <span class="nav-dot" data-screen="screen-tasks"></span>
+                <span class="nav-dot" data-screen="screen-camera"></span>
+              </div>
+            </footer>
+          </div>
+        </div>
+        
+        <!-- Brand Logo on Chassis -->
+        <div class="r1-brand">rabbit</div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Socket.io connection client -->
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
