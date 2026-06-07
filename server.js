@@ -9,6 +9,27 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://localhost:11434';
 
+const ALLOWED_ORIGINS = [
+  'https://xi-io.net',
+  'https://localhost:3000',
+  'https://localhost:3001'
+];
+
+// CORS Middleware
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 // Middleware
 app.use(express.json());
 
@@ -107,7 +128,7 @@ function classifyModelCapabilities(modelName) {
   }
 
   if (
-    (name.includes('llama3') || name.includes('qwen2.5') || name.includes('mistral') || name.includes('command-r')) &&
+    (name.includes('llama3') || name.includes('qwen2.5') || name.includes('mistral') || name.includes('command-r') || name.includes('gemma4')) &&
     !caps.includes('embedding')
   ) {
     caps.push('tools');
@@ -220,15 +241,133 @@ try {
 const server = https.createServer(sslOptions, app);
 const io = new Server(server, {
   cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
+    origin: (origin, callback) => {
+      if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
+    methods: ["GET", "POST"],
+    credentials: true
   }
 });
+
+// Helper to read the last N lines of a file securely
+function readLastLines(filePath, maxLines = 20) {
+  try {
+    if (!fs.existsSync(filePath)) return [];
+    const content = fs.readFileSync(filePath, 'utf8');
+    const lines = content.trim().split('\n').filter(Boolean);
+    return lines.slice(-maxLines).map(line => {
+      try {
+        return JSON.parse(line);
+      } catch (e) {
+        return { raw: line };
+      }
+    });
+  } catch (err) {
+    console.error(`Failed to read lines from ${filePath}:`, err);
+    return [];
+  }
+}
+
+// Shared helper to fetch local models from Ollama
+async function fetchOllamaModels() {
+  try {
+    console.log("Fetching local models from Ollama...");
+    const response = await fetch(`${OLLAMA_HOST}/api/tags`);
+    if (!response.ok) {
+      throw new Error(`Ollama HTTP error ${response.status}: ${response.statusText}`);
+    }
+    const data = await response.json();
+    return data.models ? data.models.map(m => {
+      return {
+        name: m.name,
+        capabilities: classifyModelCapabilities(m.name)
+      };
+    }) : [];
+  } catch (err) {
+    console.error("Failed to connect to Ollama:", err.message);
+    const isConnectionError = err.message.includes('ECONNREFUSED') || err.message.includes('fetch failed');
+    const code = isConnectionError ? 'OLLAMA_OFFLINE' : 'OLLAMA_LIST_FAILED';
+    const message = isConnectionError
+      ? 'Ollama AI server is offline or unreachable.'
+      : 'Failed to retrieve model list from Ollama server.';
+
+    recordDiagnostic(
+      'error',
+      'server.ollama',
+      code,
+      message,
+      err.message,
+      'Verify that Ollama is running locally at http://localhost:11434.',
+      'telemetry'
+    );
+    throw err;
+  }
+}
 
 // HTTP REST Routes
 app.get('/api/ping', (req, res) => {
   res.json({ status: 'ok', time: new Date() });
-});// Socket.io Connection Logic
+});
+
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    uptime: process.uptime(),
+    connections: io.engine.clientsCount,
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.get('/api/models', async (req, res) => {
+  try {
+    const models = await fetchOllamaModels();
+    res.json({ success: true, models });
+  } catch (err) {
+    res.status(502).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/diagnostics', (req, res) => {
+  const totalMem = os.totalmem();
+  const freeMem = os.freemem();
+  const usedMem = totalMem - freeMem;
+  
+  const diagnosticsLogs = readLastLines(DIAGNOSTICS_FILE, 20);
+  const eventLogs = readLastLines(LEDGER_FILE, 20);
+
+  res.json({
+    system: {
+      uptime: os.uptime(),
+      totalMemory: totalMem,
+      freeMemory: freeMem,
+      usedMemory: usedMem,
+      loadavg: os.loadavg(),
+      cpus: os.cpus().length
+    },
+    files: {
+      tasks: {
+        exists: fs.existsSync(TASKS_FILE),
+        size: fs.existsSync(TASKS_FILE) ? fs.statSync(TASKS_FILE).size : 0
+      },
+      diagnostics: {
+        exists: fs.existsSync(DIAGNOSTICS_FILE),
+        size: fs.existsSync(DIAGNOSTICS_FILE) ? fs.statSync(DIAGNOSTICS_FILE).size : 0
+      },
+      ledger: {
+        exists: fs.existsSync(LEDGER_FILE),
+        size: fs.existsSync(LEDGER_FILE) ? fs.statSync(LEDGER_FILE).size : 0
+      }
+    },
+    recentDiagnostics: diagnosticsLogs,
+    recentEvents: eventLogs
+  });
+});
+
+// Socket.io Connection Logic
 io.on('connection', (socket) => {
   console.log(`Client connected: ${socket.id}`);
   recordLedgerEvent('socket.connect', { socketId: socket.id });
@@ -239,37 +378,10 @@ io.on('connection', (socket) => {
   // Handle request for Ollama models
   socket.on('get-models', async () => {
     try {
-      console.log("Fetching local models from Ollama...");
-      const response = await fetch(`${OLLAMA_HOST}/api/tags`);
-      if (!response.ok) {
-        throw new Error(`Ollama HTTP error ${response.status}: ${response.statusText}`);
-      }
-      const data = await response.json();
-      const models = data.models ? data.models.map(m => {
-        return {
-          name: m.name,
-          capabilities: classifyModelCapabilities(m.name)
-        };
-      }) : [];
+      const models = await fetchOllamaModels();
       socket.emit('models-list', models);
       recordLedgerEvent('model.listed', { count: models.length, models: models.map(m => m.name) });
     } catch (err) {
-      console.error("Failed to connect to Ollama:", err.message);
-      const isConnectionError = err.message.includes('ECONNREFUSED') || err.message.includes('fetch failed');
-      const code = isConnectionError ? 'OLLAMA_OFFLINE' : 'OLLAMA_LIST_FAILED';
-      const message = isConnectionError
-        ? 'Ollama AI server is offline or unreachable.'
-        : 'Failed to retrieve model list from Ollama server.';
-
-      recordDiagnostic(
-        'error',
-        'server.ollama',
-        code,
-        message,
-        err.message,
-        'Verify that Ollama is running locally at http://localhost:11434.',
-        'telemetry'
-      );
       socket.emit('models-list', []);
     }
   });
@@ -634,9 +746,13 @@ io.on('connection', (socket) => {
   });
 });
 // Start Server
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`=================================================`);
-  console.log(`   R1 Local Companion Server is running!`);
-  console.log(`   Local Address:  https://localhost:${PORT}`);
-  console.log(`=================================================`);
-});
+if (require.main === module) {
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`=================================================`);
+    console.log(`   R1 Local Companion Server is running!`);
+    console.log(`   Local Address:  https://localhost:${PORT}`);
+    console.log(`=================================================`);
+  });
+}
+
+module.exports = { app, server, classifyModelCapabilities };

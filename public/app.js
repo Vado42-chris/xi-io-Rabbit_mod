@@ -66,9 +66,7 @@ let cameraStream = null;
 let ridgesRotation = 0;
 
 // Speech Recognition & Synthesis Setup
-const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-let recognition = null;
-let speechUtterance = null;
+// Initialized and managed via window.RabbitDeviceAdapter
 
 // Service Logger Helper
 function logActivity(message, type = 'system') {
@@ -119,33 +117,27 @@ function renderModelCapabilities(modelName) {
   });
 }
 
-if (SpeechRecognition) {
-  recognition = new SpeechRecognition();
-  recognition.continuous = false;
-  recognition.interimResults = false;
-  recognition.lang = 'en-US';
-
-  recognition.onstart = () => {
+// Initialize hardware adapter speech recognition callbacks
+window.RabbitDeviceAdapter.initAudio({
+  onStart: () => {
     isRecording = true;
     pttBtn.textContent = "LISTENING...";
     pttBtn.classList.add('recording');
     chatOutput.textContent = "Listening...";
     startVisualizer();
     logActivity("Voice input capture started.", "system");
-  };
-
-  recognition.onresult = (event) => {
-    const transcript = event.results[0][0].transcript;
+  },
+  onResult: (transcript) => {
     logActivity(`Speech recognized: "${transcript}"`, "user");
     chatOutput.textContent = `You: "${transcript}"\n\nAI: `;
     sendChatPrompt(transcript);
     socket.emit('voice-transcribed', { transcriptSummary: transcript.substring(0, 60) });
-  };
-
-  recognition.onerror = (event) => {
-    console.error("Speech recognition error:", event.error);
-    chatOutput.textContent = `Speech Error: ${event.error}. Please try again.`;
-    logActivity(`Speech recognition error: ${event.error}`, "error");
+  },
+  onError: (event) => {
+    console.error("Speech recognition error:", event.error || event);
+    const errMsg = event.error || "unknown error";
+    chatOutput.textContent = `Speech Error: ${errMsg}. Please try again.`;
+    logActivity(`Speech recognition error: ${errMsg}`, "error");
     stopVisualizer();
 
     // Emit client side audio error diagnostic
@@ -153,24 +145,21 @@ if (SpeechRecognition) {
       severity: 'warning',
       source: 'client.audio',
       code: 'AUDIO_REC_FAILED',
-      message: `Speech recognition error: ${event.error}`,
+      message: `Speech recognition error: ${errMsg}`,
       details: event.message || '',
       remediation: 'Ensure browser microphone permissions are enabled.',
       relatedFeature: 'chat'
     });
-  };
-
-  recognition.onend = () => {
+  },
+  onEnd: () => {
     isRecording = false;
     if (pttBtn.textContent === "LISTENING...") {
       pttBtn.textContent = "PUSH TO TALK";
       pttBtn.classList.remove('recording');
     }
     stopVisualizer();
-  };
-} else {
-  console.warn("Web Speech API not supported in this browser.");
-}
+  }
+});
 
 // Visualizer animation
 let visualizerInterval = null;
@@ -440,27 +429,17 @@ function showScreen(screenId) {
   }
 
   // Stop reading text when switching screens
-  if (window.speechSynthesis) {
-    window.speechSynthesis.cancel();
-  }
+  window.RabbitDeviceAdapter.cancelSpeak();
 }
 
 // Speak response via Web Speech TTS
 function speakResponse(text) {
-  if (!window.speechSynthesis) return;
-  window.speechSynthesis.cancel();
-
-  speechUtterance = new SpeechSynthesisUtterance(text);
-  speechUtterance.rate = 1.05;
-  speechUtterance.pitch = 1.0;
-  window.speechSynthesis.speak(speechUtterance);
+  window.RabbitDeviceAdapter.speak(text);
 }
 
 // Send chat request to Ollama
 function sendChatPrompt(prompt) {
-  if (window.speechSynthesis) {
-    window.speechSynthesis.cancel();
-  }
+  window.RabbitDeviceAdapter.cancelSpeak();
   socket.emit('chat-prompt', {
     prompt: prompt,
     model: selectedModel
@@ -478,48 +457,42 @@ window.deleteTask = function(id) {
 
 // Camera activation
 async function startCamera() {
-  try {
-    cameraStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width: 320, height: 320 }
-    });
-    videoFeed.srcObject = cameraStream;
-  } catch (err) {
-    console.error("Camera access failed:", err);
-    visionResult.classList.remove('hidden');
-    visionResult.textContent = "Camera access denied. Ensure HTTPS context.";
+  const stream = await window.RabbitDeviceAdapter.initCamera(videoFeed, {
+    onStart: () => {
+      cameraStream = videoFeed.srcObject;
+    },
+    onError: (err) => {
+      console.error("Camera access failed:", err);
+      visionResult.classList.remove('hidden');
+      visionResult.textContent = "Camera access denied. Ensure HTTPS context.";
 
-    // Emit client side camera error diagnostic
-    socket.emit('client-diagnostic', {
-      severity: 'error',
-      source: 'client.camera',
-      code: 'CAMERA_ACCESS_DENIED',
-      message: 'Camera access denied or unavailable.',
-      details: err.message || '',
-      remediation: 'Enable camera permissions for the site and use HTTPS.',
-      relatedFeature: 'vision'
-    });
+      // Emit client side camera error diagnostic
+      socket.emit('client-diagnostic', {
+        severity: 'error',
+        source: 'client.camera',
+        code: 'CAMERA_ACCESS_DENIED',
+        message: 'Camera access denied or unavailable.',
+        details: err.message || '',
+        remediation: 'Enable camera permissions for the site and use HTTPS.',
+        relatedFeature: 'vision'
+      });
+    }
+  });
+  if (stream) {
+    cameraStream = stream;
   }
 }
 
 function stopCamera() {
-  if (cameraStream) {
-    cameraStream.getTracks().forEach(track => track.stop());
-    cameraStream = null;
-  }
+  window.RabbitDeviceAdapter.stopCamera();
+  cameraStream = null;
   videoFeed.srcObject = null;
 }
 
 // Scan/Capture frame
 function captureImageAndAnalyze() {
-  if (!cameraStream) return;
-
-  const ctx = photoCanvas.getContext('2d');
-  photoCanvas.width = 320;
-  photoCanvas.height = 320;
-
-  // Draw current video frame
-  ctx.drawImage(videoFeed, 0, 0, 320, 320);
-  const base64Image = photoCanvas.toDataURL('image/jpeg');
+  const base64Image = window.RabbitDeviceAdapter.captureFrame(videoFeed, photoCanvas);
+  if (!base64Image) return;
 
   visionResult.classList.remove('hidden');
   visionResult.textContent = "Sending image to Ollama...";
@@ -659,39 +632,39 @@ document.querySelectorAll('.back-btn').forEach(btn => {
 
 // PTT click behavior
 pttBtn.addEventListener('mousedown', () => {
-  if (recognition) recognition.start();
+  window.RabbitDeviceAdapter.startAudio();
 });
 pttBtn.addEventListener('mouseup', () => {
-  if (recognition && isRecording) recognition.stop();
+  if (isRecording) window.RabbitDeviceAdapter.stopAudio();
 });
 pttBtn.addEventListener('touchstart', (e) => {
   e.preventDefault();
-  if (recognition) recognition.start();
+  window.RabbitDeviceAdapter.startAudio();
 });
 pttBtn.addEventListener('touchend', (e) => {
   e.preventDefault();
-  if (recognition && isRecording) recognition.stop();
+  if (isRecording) window.RabbitDeviceAdapter.stopAudio();
 });
 
 // Physical Simulator Interactive Handlers
 if (physicalPtt) {
   physicalPtt.addEventListener('mousedown', () => {
     physicalPtt.classList.add('active');
-    if (recognition) recognition.start();
+    window.RabbitDeviceAdapter.startAudio();
   });
   physicalPtt.addEventListener('mouseup', () => {
     physicalPtt.classList.remove('active');
-    if (recognition && isRecording) recognition.stop();
+    if (isRecording) window.RabbitDeviceAdapter.stopAudio();
   });
   physicalPtt.addEventListener('touchstart', (e) => {
     e.preventDefault();
     physicalPtt.classList.add('active');
-    if (recognition) recognition.start();
+    window.RabbitDeviceAdapter.startAudio();
   });
   physicalPtt.addEventListener('touchend', (e) => {
     e.preventDefault();
     physicalPtt.classList.remove('active');
-    if (recognition && isRecording) recognition.stop();
+    if (isRecording) window.RabbitDeviceAdapter.stopAudio();
   });
 }
 
@@ -745,77 +718,138 @@ captureBtn.addEventListener('click', () => {
 });
 
 // ----------------- Keyboard Key Navigation Mapping -----------------
-window.addEventListener('keydown', (e) => {
-  // Ignore events when user is typing in form fields or selecting elements
-  const activeEl = document.activeElement;
-  if (
-    (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT')) ||
-    (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT'))
-  ) {
+// ----------------- Keyboard Key Navigation Mapping & Device Adapter Bindings -----------------
+function handleVolumeUp() {
+  if (activeScreen === 'screen-dashboard') {
+    const items = document.querySelectorAll('.menu-list .menu-item');
+    items[currentMenuIndex].classList.remove('active');
+    currentMenuIndex = (currentMenuIndex - 1 + items.length) % items.length;
+    items[currentMenuIndex].classList.add('active');
+    rotateWheelRidges(-30);
+  } else if (activeScreen === 'screen-tasks') {
+    const cards = document.querySelectorAll('.scroll-list .task-card');
+    if (cards.length === 0) return;
+    if (currentTaskIndex !== -1) cards[currentTaskIndex].classList.remove('active');
+    currentTaskIndex = (currentTaskIndex - 1 + cards.length) % cards.length;
+    cards[currentTaskIndex].classList.add('active');
+    cards[currentTaskIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    rotateWheelRidges(-30);
+  }
+}
+
+function handleVolumeDown() {
+  if (activeScreen === 'screen-dashboard') {
+    const items = document.querySelectorAll('.menu-list .menu-item');
+    items[currentMenuIndex].classList.remove('active');
+    currentMenuIndex = (currentMenuIndex + 1) % items.length;
+    items[currentMenuIndex].classList.add('active');
+    rotateWheelRidges(30);
+  } else if (activeScreen === 'screen-tasks') {
+    const cards = document.querySelectorAll('.scroll-list .task-card');
+    if (cards.length === 0) return;
+    if (currentTaskIndex !== -1) cards[currentTaskIndex].classList.remove('active');
+    currentTaskIndex = (currentTaskIndex + 1) % cards.length;
+    cards[currentTaskIndex].classList.add('active');
+    cards[currentTaskIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    rotateWheelRidges(30);
+  }
+}
+
+function handleSelect() {
+  if (activeScreen === 'screen-dashboard') {
+    const items = document.querySelectorAll('.menu-list .menu-item');
+    const targetScreen = items[currentMenuIndex].getAttribute('data-target');
+    showScreen(targetScreen);
+  } else if (activeScreen === 'screen-tasks') {
+    const cards = document.querySelectorAll('.scroll-list .task-card');
+    if (cards.length === 0) return;
+    if (currentTaskIndex !== -1) {
+      const taskElement = cards[currentTaskIndex];
+      const id = parseInt(taskElement.id.replace('task-', ''));
+      toggleTask(id);
+    }
+  } else if (activeScreen === 'screen-chat') {
+    if (!isRecording) {
+      window.RabbitDeviceAdapter.startAudio();
+    } else {
+      window.RabbitDeviceAdapter.stopAudio();
+    }
+  }
+}
+
+function handlePTTDown() {
+  if (activeScreen === 'screen-chat') {
+    window.RabbitDeviceAdapter.startAudio();
+  }
+}
+
+function handlePTTUp() {
+  if (activeScreen === 'screen-chat' && isRecording) {
+    window.RabbitDeviceAdapter.stopAudio();
+  }
+}
+
+window.RabbitDeviceAdapter.bindInputs({
+  onVolumeUp: handleVolumeUp,
+  onVolumeDown: handleVolumeDown,
+  onSelect: handleSelect,
+  onPTTDown: handlePTTDown,
+  onPTTUp: handlePTTUp
+});
+
+// Setup default screen
+showScreen('screen-dashboard');
+
+// Cross-Origin Security Configuration
+const ALLOWED_ORIGINS = [
+  'https://xi-io.net',
+  'https://localhost:3000',
+  'https://localhost:3001'
+];
+
+// Handle trusted parent/cross-origin commands
+window.addEventListener('message', (event) => {
+  if (!ALLOWED_ORIGINS.includes(event.origin)) {
+    console.warn(`Blocked message from untrusted origin: ${event.origin}`);
     return;
   }
 
-  const isUp = (e.key === 'AudioVolumeUp' || e.key === 'ArrowUp');
-  const isDown = (e.key === 'AudioVolumeDown' || e.key === 'ArrowDown');
-  const isSelect = (e.key === 'Enter' || e.key === ' ' || e.key === 'Select');
-
-  if (isUp || isDown || isSelect) {
-    // Intercept to prevent default adjustments
-    e.preventDefault();
-
-    if (activeScreen === 'screen-dashboard') {
-      const items = document.querySelectorAll('.menu-list .menu-item');
-
-      if (isUp) {
-        items[currentMenuIndex].classList.remove('active');
-        currentMenuIndex = (currentMenuIndex - 1 + items.length) % items.length;
-        items[currentMenuIndex].classList.add('active');
-        rotateWheelRidges(-30);
-      } else if (isDown) {
-        items[currentMenuIndex].classList.remove('active');
-        currentMenuIndex = (currentMenuIndex + 1) % items.length;
-        items[currentMenuIndex].classList.add('active');
-        rotateWheelRidges(30);
-      } else if (isSelect) {
-        const targetScreen = items[currentMenuIndex].getAttribute('data-target');
+  const message = event.data;
+  if (message && message.type) {
+    console.log('Received trusted postMessage:', message);
+    
+    if (message.type === 'PING') {
+      event.source.postMessage({ type: 'PONG', status: 'ready' }, event.origin);
+    }
+    
+    if (message.type === 'NAVIGATE') {
+      const targetScreen = message.payload?.screen;
+      if (targetScreen) {
         showScreen(targetScreen);
       }
     }
-
-    else if (activeScreen === 'screen-tasks') {
-      const cards = document.querySelectorAll('.scroll-list .task-card');
-      if (cards.length === 0) return;
-
-      if (isUp) {
-        if (currentTaskIndex !== -1) cards[currentTaskIndex].classList.remove('active');
-        currentTaskIndex = (currentTaskIndex - 1 + cards.length) % cards.length;
-        cards[currentTaskIndex].classList.add('active');
-        cards[currentTaskIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-        rotateWheelRidges(-30);
-      } else if (isDown) {
-        if (currentTaskIndex !== -1) cards[currentTaskIndex].classList.remove('active');
-        currentTaskIndex = (currentTaskIndex + 1) % cards.length;
-        cards[currentTaskIndex].classList.add('active');
-        cards[currentTaskIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-        rotateWheelRidges(30);
-      } else if (isSelect) {
-        if (currentTaskIndex !== -1) {
-          const taskElement = cards[currentTaskIndex];
-          const id = parseInt(taskElement.id.replace('task-', ''));
-          toggleTask(id);
-        }
-      }
-    }
-
-    else if (activeScreen === 'screen-chat' && isSelect) {
-      if (!isRecording) {
-        if (recognition) recognition.start();
-      } else {
-        if (recognition) recognition.stop();
+    
+    if (message.type === 'ADD_TASK') {
+      const text = message.payload?.text;
+      if (text) {
+        socket.emit('create-task', text);
       }
     }
   }
 });
 
-// Setup default screen
-showScreen('screen-dashboard');
+// Handshake notification to parent container
+if (window.parent && window.parent !== window) {
+  let parentOrigin = '*';
+  try {
+    if (document.referrer) {
+      const referrerUrl = new URL(document.referrer);
+      if (ALLOWED_ORIGINS.includes(referrerUrl.origin)) {
+        parentOrigin = referrerUrl.origin;
+      }
+    }
+  } catch (err) {
+    console.warn("Failed to check referrer origin:", err.message);
+  }
+  window.parent.postMessage({ type: 'IFRAME_READY' }, parentOrigin);
+}
