@@ -10,6 +10,14 @@
 const socket = io({ transports: ['websocket'], reconnectionAttempts: 10 });
 window.ibalSocket = socket;
 
+/* ── UI COMFORT SCALE RESTORE ────────────────────────────────────────────────── */
+(function applyStoredScale() {
+  const stored = localStorage.getItem('ibal-ui-scale');
+  if (stored) {
+    document.documentElement.style.setProperty('--ui-scale', stored);
+  }
+})();
+
 const connDot   = document.getElementById('conn-dot');
 const connLabel = document.getElementById('conn-label');
 const healthPill = document.getElementById('health-indicator') || document.getElementById('health-pill');

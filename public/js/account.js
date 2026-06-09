@@ -171,6 +171,23 @@ export function init() {
 
   form.addEventListener('submit', onSubmit);
 
+  // Handle UI Density & Comfort Scale
+  const densitySelector = document.getElementById('density-selector');
+  if (densitySelector) {
+    const currentScale = localStorage.getItem('ibal-ui-scale') || '1.25';
+    densitySelector.value = currentScale;
+  }
+
+  const onDensityChange = (e) => {
+    const selectedScale = e.target.value;
+    localStorage.setItem('ibal-ui-scale', selectedScale);
+    document.documentElement.style.setProperty('--ui-scale', selectedScale);
+  };
+
+  if (densitySelector) {
+    densitySelector.addEventListener('change', onDensityChange);
+  }
+
   // Initial render sweep
   updateCustomSectionVisibility();
   renderChainPreview();
@@ -202,5 +219,8 @@ export function init() {
     }
     form.removeEventListener('submit', onSubmit);
     window.removeEventListener('lexicon:updated', onLexiconUpdatedEvent);
+    if (densitySelector) {
+      densitySelector.removeEventListener('change', onDensityChange);
+    }
   };
 }

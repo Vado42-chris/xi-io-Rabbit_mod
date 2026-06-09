@@ -9,6 +9,9 @@
 
 /* ── BRAND OVERRIDES ─────────────────────────────────────────────────────────── */
 :root {
+  /* accessibility comfort-scale system */
+  --ui-scale: 1.25; /* Default is 1.25 (Comfort). Compact: 1.0, Large: 1.5 */
+
   /* ibal uses orange, not the framework's teal */
   --accent: #ff5722;
   --accent-soft: rgba(255, 87, 34, 0.10);
@@ -18,11 +21,11 @@
   --font-sans: 'Outfit', 'Inter', system-ui, sans-serif;
   --font-mono: 'VT323', 'SFMono-Regular', monospace;
 
-  /* ibal layout dimensions */
-  --topbar-h: 52px;
-  --sidebar-w: 220px;
-  --sidebar-collapsed-w: 60px;
-  --preview-w: 380px;
+  /* ibal layout dimensions - scaled dynamically */
+  --topbar-h: calc(52px * var(--ui-scale));
+  --sidebar-w: calc(220px * var(--ui-scale));
+  --sidebar-collapsed-w: calc(60px * var(--ui-scale));
+  --preview-w: calc(380px * var(--ui-scale));
 
   /* Status semantic */
   --status-online: var(--ok, #6fd6ad);
@@ -31,7 +34,10 @@
 }
 
 /* ── RESET BODY ──────────────────────────────────────────────────────────────── */
-html, body {
+html {
+  font-size: calc(16px * var(--ui-scale, 1.25));
+}
+body {
   height: 100%;
   overflow: hidden; /* Fixed-height management console — pages scroll internally */
   font-family: var(--font-sans);
@@ -1045,6 +1051,47 @@ html, body {
 .picker-dir-item:hover .dir-item-icon {
   opacity: 1;
 }
+
+/* ── ACCESSIBILITY & COMFORT SCALING ADJUSTMENTS ────────────────────────────── */
+
+/* Ensure minimum button/control sizes (44px target) and scalable text/paddings */
+.btn, .button, button, .icon-btn, select, input {
+  min-height: max(44px, calc(34px * var(--ui-scale)));
+  box-sizing: border-box;
+}
+
+/* Sidebar nav-item padding, label alignment & hover */
+.nav-item {
+  padding: calc(10px * var(--ui-scale)) calc(14px * var(--ui-scale)) !important;
+  gap: calc(10px * var(--ui-scale)) !important;
+  min-height: max(44px, calc(36px * var(--ui-scale)));
+}
+
+/* Table text accessibility, padding and row comfort height */
+.ingress-queue-table {
+  line-height: 1.5;
+}
+.ingress-queue-table th,
+.ingress-queue-table td {
+  padding: calc(12px * var(--ui-scale)) calc(16px * var(--ui-scale)) !important;
+}
+
+/* Card and Panel padding scaling */
+.panel, .status-card, .metric-card, .diagnostic-card {
+  padding: calc(16px * var(--ui-scale)) !important;
+}
+
+/* Badge/pill minimum readability sizes */
+.badge, .pill, .nav-badge, .level-badge, .health-pill {
+  font-size: 0.75rem !important; /* calc(0.75 * 16px * 1.25) = 15px minimum equivalent */
+}
+
+/* Standard focus ring for visibility */
+.btn:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 
 
 
