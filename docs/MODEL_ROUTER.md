@@ -1,6 +1,6 @@
 # Local Model Capability Router (PASS 2 - Feature B)
 
-This document defines the routing rules and capability classifications for local Ollama models within the Rabbit R1 Companion.
+This document defines the routing rules and capability classifications for local Ollama models within the xi-io: ibal Console.
 
 ---
 
@@ -38,7 +38,7 @@ To prevent sending incompatible payloads to models (e.g., prompting a text-only 
 
 ## 🛠️ Routing Matrix
 
-When a user triggers an interaction on the R1 Companion, the router applies the following restrictions:
+When a user triggers an interaction on the ibal Console, the router applies the following restrictions:
 
 | Interface Context | Required Capability | Default Fallback Action |
 | :--- | :--- | :--- |

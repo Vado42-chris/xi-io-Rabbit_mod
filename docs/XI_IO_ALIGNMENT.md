@@ -1,6 +1,6 @@
-# R1 Companion - xi-io Architectural Alignment (PASS 1)
+# xi-io: ibal - xi-io Architectural Alignment (PASS 1)
 
-This alignment plan details how the Rabbit R1 Companion projects data ingress, analysis pipelines, and execution outputs (egress) using standard `xi-io` system telemetry architectures.
+This alignment plan details how the xi-io: ibal Console projects data ingress, analysis pipelines, and execution outputs (egress) using standard `xi-io` system telemetry architectures.
 
 ---
 

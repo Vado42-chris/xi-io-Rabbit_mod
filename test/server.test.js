@@ -135,7 +135,7 @@ test('EventAtom Telemetry Integrity and Schema Validation', async (t) => {
 
   assert.strictEqual(event.version, 'v1');
   assert.strictEqual(event.event_subclass, 'test.event.atom');
-  assert.strictEqual(event.product_id, 'xi_io_rabbit_mod');
+  assert.strictEqual(event.product_id, 'xi_io_ibal');
   assert.strictEqual(event.repo, '016_Rabbit_r1');
   assert.strictEqual(event.raw_evidence_preserved, true);
 

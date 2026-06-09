@@ -1,14 +1,14 @@
-# Rabbit R1 Local Productivity Companion
+# xi-io: ibal Console
 
-A professional-grade, Teenage Engineering inspired dual-pane productivity suite and interactive hardware simulator built for `xi-io.net` workspace coordination. 
+A professional-grade, Teenage Engineering inspired dual-pane orchestration console and interactive paired-device interface built for `xi-io.net` workspace coordination. 
 
-This companion operates entirely locally, utilizing a self-signed HTTPS secure connection to access browser APIs (such as Speech Recognition and Camera video capture) and communicates with local LLM runtimes (via Ollama) to coordinate project tasks.
+This console operates entirely locally, utilizing a self-signed HTTPS secure connection to access browser APIs (such as Speech Recognition and Camera video capture) and communicates with local LLM runtimes (via Ollama) to coordinate project tasks.
 
 ---
 
 ## 🛠 Features
 
-1. **Interactive Rabbit R1 Hardware Simulator**:
+1. **Interactive Paired-Device Interface (Rabbit R1 Surface)**:
    - High-fidelity visual replication of the original pocket device chassis.
    - Fully bindable physical PTT button, active scroll wheel, and rotational camera module.
    - Standard keyboard mapping: `ArrowUp`/`AudioVolumeUp` (scroll wheel up), `ArrowDown`/`AudioVolumeDown` (scroll wheel down), `Enter`/`Space`/`Select` (wheel click/PTT).

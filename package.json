@@ -1,7 +1,7 @@
 {
-  "name": "rabbit-r1-local-companion",
+  "name": "xi-io-ibal",
   "version": "1.0.0",
-  "description": "Local-first productivity companion for Rabbit R1 running with local Ollama",
+  "description": "Local-first user-facing orchestration and ingress app for the xi-io ecosystem (ibal console)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
