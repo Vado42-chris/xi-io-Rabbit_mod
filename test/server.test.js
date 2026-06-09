@@ -4,7 +4,7 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 const fs = require('fs');
 const test = require('node:test');
 const assert = require('node:assert');
-const { classifyModelCapabilities, server, recordDiagnostic, recordLedgerEvent, DIAGNOSTICS_FILE, LEDGER_FILE } = require('../server.js');
+const { classifyModelCapabilities, server, io, recordDiagnostic, recordLedgerEvent, DIAGNOSTICS_FILE, LEDGER_FILE } = require('../server.js');
 
 const originalFetch = globalThis.fetch;
 let testPort;
@@ -255,6 +255,131 @@ test('Extensions Endpoint and Health Pings', async (t) => {
   assert.ok(statuses.includes('connected'), 'At least one extension should be connected');
 
   globalThis.fetch = originalGlobalFetch;
+});
+
+test('Storage Status Endpoint Verification', async (t) => {
+  const res = await originalFetch(`${testUrl}/api/storage/status`);
+  assert.strictEqual(res.status, 200);
+  const data = await res.json();
+  
+  assert.ok(data.workspace, 'Workspace status should be returned');
+  assert.ok(data.cloud, 'Cloud sync status should be returned');
+  assert.ok(data.backup, 'Backup status should be returned');
+  
+  assert.strictEqual(typeof data.workspace.path, 'string');
+  assert.ok(['active', 'unavailable', 'permission_denied'].includes(data.workspace.status));
+});
+
+test('File System List Endpoint Verification', async (t) => {
+  // Test allowed path listing
+  const targetPath = '/media/chrishallberg/Storage 22/999_Work/003_Projects/';
+  const res = await originalFetch(`${testUrl}/api/fs/list?path=${encodeURIComponent(targetPath)}`);
+  assert.strictEqual(res.status, 200);
+  const data = await res.json();
+  
+  assert.strictEqual(data.success, true);
+  // Ignore trailing slashes in path comparison
+  assert.strictEqual(data.currentPath.replace(/\/$/, ''), targetPath.replace(/\/$/, ''));
+  assert.ok(Array.isArray(data.directories));
+  
+  // Test disallowed path listing (should fail)
+  const forbiddenPath = '/etc/';
+  const resForbidden = await originalFetch(`${testUrl}/api/fs/list?path=${encodeURIComponent(forbiddenPath)}`);
+  assert.strictEqual(resForbidden.status, 200);
+  const dataForbidden = await resForbidden.json();
+  assert.strictEqual(dataForbidden.success, false);
+  assert.ok(dataForbidden.error.includes('outside allowed root'));
+});
+
+test('Socket.io Ingress Scanning & Commit Telemetry Integration', async (t) => {
+  const connectionListeners = io.listeners('connection');
+  assert.ok(connectionListeners.length > 0, 'Should have at least one socket connection listener');
+  const onConnection = connectionListeners[0];
+
+  let scanResultsEmitted = null;
+
+  // Create a mock socket object
+  const mockSocket = {
+    id: 'test-mock-socket-id',
+    events: {},
+    emit(event, data) {
+      if (event === 'ingress-scan-results') {
+        scanResultsEmitted = data;
+      }
+    },
+    on(event, callback) {
+      this.events[event] = callback;
+    },
+    off(event, callback) {
+      delete this.events[event];
+    }
+  };
+
+  onConnection(mockSocket);
+
+  assert.ok(mockSocket.events['ingress-scan'], 'Should register ingress-scan event handler');
+  assert.ok(mockSocket.events['ingress-commit'], 'Should register ingress-commit event handler');
+
+  // Trigger ingress-scan for an allowed path
+  const targetPath = '/media/chrishallberg/Storage 22/999_Work/003_Projects/';
+  await mockSocket.events['ingress-scan']({ path: targetPath });
+
+  assert.ok(scanResultsEmitted, 'Should emit scan results');
+  assert.strictEqual(scanResultsEmitted.success, true);
+  assert.ok(Array.isArray(scanResultsEmitted.candidates));
+
+  // Trigger ingress-commit
+  const commitPayload = {
+    count: 2,
+    path: targetPath,
+    items: [
+      { title: 'Project Alpha', system: 'alpha', path: 'alpha/', status: 'eligible' },
+      { title: 'Project Beta', system: 'beta', path: 'beta/', status: 'eligible' }
+    ]
+  };
+
+  // Record the ledger size BEFORE triggering the commit so we only inspect
+  // newly-appended lines and never pick up stale records from prior test runs.
+  const ledgerLinesBefore = fs.existsSync(LEDGER_FILE)
+    ? fs.readFileSync(LEDGER_FILE, 'utf8').trim().split('\n').filter(Boolean).length
+    : 0;
+
+  mockSocket.events['ingress-commit'](commitPayload);
+
+  // Poll ledger file until a NEW committed record appears after our baseline.
+  async function waitForNewLedgerEvent(expectedSubclass, baselineLineCount, maxRetries = 40) {
+    for (let i = 0; i < maxRetries; i++) {
+      if (fs.existsSync(LEDGER_FILE)) {
+        const content = fs.readFileSync(LEDGER_FILE, 'utf8').trim();
+        if (content) {
+          const lines = content.split('\n').filter(Boolean);
+          // Only examine lines appended since we captured the baseline
+          const newLines = lines.slice(baselineLineCount);
+          for (let j = newLines.length - 1; j >= 0; j--) {
+            try {
+              const parsed = JSON.parse(newLines[j]);
+              if (parsed.event_subclass === expectedSubclass) {
+                return parsed;
+              }
+            } catch (err) {}
+          }
+        }
+      }
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    throw new Error(`Timeout waiting for new ledger event of subclass ${expectedSubclass}`);
+  }
+
+  const record = await waitForNewLedgerEvent('real.batch.ingress.commit', ledgerLinesBefore);
+
+  // Read back the evidence file written for this specific commit
+  const evidencePath = record.raw_evidence_ref.replace('file://', '');
+  assert.ok(fs.existsSync(evidencePath), 'Evidence file must be written to data/evidence/');
+  const evidence = JSON.parse(fs.readFileSync(evidencePath, 'utf8'));
+
+  assert.strictEqual(evidence.count, commitPayload.count, 'Evidence count must match commit payload');
+  assert.strictEqual(evidence.path, targetPath);
+  assert.strictEqual(evidence.items[0].title, 'Project Alpha');
 });
 
 
