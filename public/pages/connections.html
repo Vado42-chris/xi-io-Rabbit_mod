@@ -23,30 +23,30 @@
       <div class="storage-card" style="background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 8px;">
         <div style="display: flex; justify-content: space-between; align-items: flex-start;">
           <h4 style="margin: 0; font-size: 0.9rem; font-weight: 700;">Primary <span data-t="workspace">Workspace</span></h4>
-          <span class="pill pill-success" style="font-size: 0.65rem; padding: 1px 6px; background: rgba(111,214,173,.14); color: var(--ok, #6fd6ad);">Connected</span>
+          <span id="workspace-badge" class="pill pill-success" style="font-size: 0.65rem; padding: 1px 6px; background: rgba(111,214,173,.14); color: var(--ok, #6fd6ad);">Checking...</span>
         </div>
-        <p style="margin: 0; font-size: 0.78rem; font-family: var(--font-mono); color: var(--muted); word-break: break-all;">/media/chrishallberg/Storage 22/999_Work/003_Projects/</p>
-        <span style="font-size: 0.72rem; color: var(--muted);">Mapped volume for ROMs, assets, and active builds.</span>
+        <p id="workspace-path" style="margin: 0; font-size: 0.78rem; font-family: var(--font-mono); color: var(--muted); word-break: break-all;">/media/chrishallberg/Storage 22/999_Work/003_Projects/</p>
+        <span id="workspace-desc" style="font-size: 0.72rem; color: var(--muted);">Mapped volume for ROMs, assets, and active builds.</span>
       </div>
 
       <!-- Card 2: Cloud Sync Cache -->
       <div class="storage-card" style="background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 8px;">
         <div style="display: flex; justify-content: space-between; align-items: flex-start;">
           <h4 style="margin: 0; font-size: 0.9rem; font-weight: 700;">Cloud Sync Cache</h4>
-          <span class="pill pill-warning" style="font-size: 0.65rem; padding: 1px 6px; background: rgba(217,177,93,0.14); color: var(--warn, #d9b15d);">Unavailable</span>
+          <span id="cloud-badge" class="pill pill-warning" style="font-size: 0.65rem; padding: 1px 6px; background: rgba(217,177,93,0.14); color: var(--warn, #d9b15d);">Checking...</span>
         </div>
-        <p style="margin: 0; font-size: 0.78rem; font-family: var(--font-mono); color: var(--muted); word-break: break-all;">/home/chrishallberg/cloud_cache/</p>
-        <span style="font-size: 0.72rem; color: var(--muted);">Directory missing or write permissions not granted.</span>
+        <p id="cloud-path" style="margin: 0; font-size: 0.78rem; font-family: var(--font-mono); color: var(--muted); word-break: break-all;">/home/chrishallberg/cloud_cache/</p>
+        <span id="cloud-desc" style="font-size: 0.72rem; color: var(--muted);">Directory missing or write permissions not granted.</span>
       </div>
 
       <!-- Card 3: Backup Destination -->
       <div class="storage-card" style="background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 8px;">
         <div style="display: flex; justify-content: space-between; align-items: flex-start;">
           <h4 style="margin: 0; font-size: 0.9rem; font-weight: 700;">Backup Destination (NAS)</h4>
-          <span class="pill pill-offline" style="font-size: 0.65rem; padding: 1px 6px; background: rgba(219,114,114,0.14); color: var(--danger, #db7272);">Permission Denied</span>
+          <span id="backup-badge" class="pill pill-offline" style="font-size: 0.65rem; padding: 1px 6px; background: rgba(219,114,114,0.14); color: var(--danger, #db7272);">Checking...</span>
         </div>
-        <p style="margin: 0; font-size: 0.78rem; font-family: var(--font-mono); color: var(--muted); word-break: break-all;">/mnt/nas/backup/</p>
-        <span style="font-size: 0.72rem; color: var(--muted);">Authentication expired or mount point offline.</span>
+        <p id="backup-path" style="margin: 0; font-size: 0.78rem; font-family: var(--font-mono); color: var(--muted); word-break: break-all;">/mnt/nas/backup/</p>
+        <span id="backup-desc" style="font-size: 0.72rem; color: var(--muted);">Authentication expired or mount point offline.</span>
       </div>
     </div>
   </section>
@@ -62,7 +62,7 @@
     <p class="muted">Select a storage target path, customize presets, and execute a local discovery sweep to register eligible content assets.</p>
 
     <!-- Path Selector Controls -->
-    <div style="display: grid; grid-template-columns: 1fr auto; gap: 12px; margin-top: 16px; align-items: end;">
+    <div style="display: grid; grid-template-columns: 1fr auto auto; gap: 12px; margin-top: 16px; align-items: end;">
       <div style="display: flex; flex-direction: column; gap: 6px;">
         <label for="ingress-path-input" style="font-size: 0.8rem; font-weight: 600; color: var(--muted);">Ingress Path / Mount Root</label>
         <div style="display: flex; gap: 8px; width: 100%;">
@@ -75,6 +75,7 @@
           </select>
         </div>
       </div>
+      <button class="btn" id="btn-browse-folder" style="height: 38px; background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: var(--text);">Browse...</button>
       <button class="btn btn-primary" id="btn-scan-folder" style="height: 38px;">Scan Folder</button>
     </div>
   </section>
@@ -131,3 +132,54 @@
     </div>
   </section>
 </div>
+
+<!-- Folder Picker Modal Overlay -->
+<div id="folder-picker-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="picker-modal-title">
+  <div class="modal-content" style="max-width: 540px; display: flex; flex-direction: column; overflow: hidden;">
+    <div class="modal-header" style="padding: 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.01);">
+      <h3 id="picker-modal-title" style="margin: 0; font-size: 1.1rem; font-weight: 700; color: var(--text);">📁 Select Ingress Folder</h3>
+      <button id="close-picker-btn" class="icon-btn" aria-label="Close folder picker" style="background: none; border: none; color: var(--muted); cursor: pointer; font-size: 1.1rem;">✕</button>
+    </div>
+    <div class="modal-body" style="padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+      <!-- Breadcrumbs & Navigation -->
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+        <span id="picker-current-path" style="font-family: var(--font-mono); font-size: 0.78rem; word-break: break-all; color: var(--text); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 4px 8px; background: rgba(0,0,0,0.2); border-radius: 4px; border: 1px solid var(--border);">/media/chrishallberg/Storage 22/...</span>
+        <button id="btn-picker-up" class="btn" style="padding: 4px 10px; font-size: 0.75rem; background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: var(--text); height: 28px; flex-shrink: 0; display: flex; align-items: center; gap: 4px; border-radius: 4px;">↩ Up</button>
+      </div>
+
+      <!-- Directory List Panel -->
+      <div id="picker-dir-list" style="height: 240px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; background: rgba(0,0,0,0.15); display: flex; flex-direction: column; gap: 2px; padding: 4px;">
+        <!-- Filled by JS -->
+      </div>
+
+      <!-- Footer action controls -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
+        <button id="btn-picker-cancel" class="btn" style="background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: var(--text); padding: 8px 16px; border-radius: 6px;">Cancel</button>
+        <button id="btn-picker-select" class="btn btn-primary" style="padding: 8px 16px; border-radius: 6px;">Confirm Selection</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+.picker-dir-item {
+  padding: 8px 12px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+.picker-dir-item:hover {
+  background: rgba(255,255,255,0.05);
+  color: var(--accent, #6fbdff);
+}
+.picker-dir-item.selected {
+  background: rgba(111,189,255,0.15);
+  border: 1px solid rgba(111,189,255,0.3);
+  color: var(--accent, #6fbdff);
+}
+</style>

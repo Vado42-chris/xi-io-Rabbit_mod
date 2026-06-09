@@ -1129,6 +1129,79 @@ app.post('/api/lexicon', (req, res) => {
   }
 });
 
+function getPathStatus(targetPath) {
+  try {
+    if (!fs.existsSync(targetPath)) {
+      return { status: 'unavailable', path: targetPath, message: 'Directory does not exist.' };
+    }
+    try {
+      fs.accessSync(targetPath, fs.constants.R_OK | fs.constants.W_OK);
+      return { status: 'active', path: targetPath, message: 'Directory is online and writable.' };
+    } catch (accessErr) {
+      if (accessErr.code === 'EACCES') {
+        return { status: 'permission_denied', path: targetPath, message: 'Read/write permission denied.' };
+      }
+      return { status: 'offline', path: targetPath, message: `Access error: ${accessErr.message}` };
+    }
+  } catch (err) {
+    return { status: 'unavailable', path: targetPath, message: err.message };
+  }
+}
+
+app.get('/api/storage/status', (req, res) => {
+  const workspacePath = '/media/chrishallberg/Storage 22/999_Work/003_Projects/';
+  const cloudPath = '/home/chrishallberg/cloud_cache/';
+  const backupPath = '/mnt/nas/backup/';
+
+  res.json({
+    workspace: getPathStatus(workspacePath),
+    cloud: getPathStatus(cloudPath),
+    backup: getPathStatus(backupPath)
+  });
+});
+
+app.get('/api/fs/list', (req, res) => {
+  try {
+    const targetPath = path.resolve(req.query.path || '/media/chrishallberg/Storage 22/999_Work/003_Projects/');
+    
+    const allowedRoots = [
+      path.resolve('/media/chrishallberg/Storage 22/999_Work/003_Projects/'),
+      path.resolve('/home/chrishallberg/cloud_cache/'),
+      path.resolve('/mnt/nas/backup/')
+    ];
+    
+    const isAllowed = allowedRoots.some(root => {
+      return targetPath === root || targetPath.startsWith(root + path.sep);
+    });
+    
+    if (!isAllowed) {
+      return res.json({ success: false, error: 'Path is outside allowed root directories.' });
+    }
+    
+    if (!fs.existsSync(targetPath)) {
+      return res.json({ success: false, error: 'Path does not exist.' });
+    }
+    const stat = fs.statSync(targetPath);
+    if (!stat.isDirectory()) {
+      return res.json({ success: false, error: 'Path is not a directory.' });
+    }
+    const files = fs.readdirSync(targetPath, { withFileTypes: true });
+    const directories = files
+      .filter(dirent => dirent.isDirectory() && !dirent.name.startsWith('.'))
+      .map(dirent => dirent.name)
+      .sort();
+    
+    res.json({
+      success: true,
+      currentPath: targetPath,
+      parentPath: path.dirname(targetPath),
+      directories
+    });
+  } catch (err) {
+    res.json({ success: false, error: err.message });
+  }
+});
+
 app.get('/api/ping', (req, res) => {
   res.json({ status: 'ok', time: new Date() });
 });
@@ -1694,6 +1767,84 @@ io.on('connection', (socket) => {
 
   socket.on('ingress-scan', ({ path: targetPath }) => {
     recordLedgerEvent('real.batch.ingress.scan', { path: targetPath });
+    try {
+      const resolvedPath = path.resolve(targetPath);
+      if (!fs.existsSync(resolvedPath)) {
+        socket.emit('ingress-scan-results', { success: false, error: 'Path does not exist', candidates: [] });
+        return;
+      }
+      const stat = fs.statSync(resolvedPath);
+      if (!stat.isDirectory()) {
+        socket.emit('ingress-scan-results', { success: false, error: 'Path is not a directory', candidates: [] });
+        return;
+      }
+
+      const files = fs.readdirSync(resolvedPath, { withFileTypes: true });
+      
+      const recordsFile = path.join(__dirname, 'data', 'ingress_records.json');
+      let committedSystems = new Set();
+      if (fs.existsSync(recordsFile)) {
+        try {
+          const committed = JSON.parse(fs.readFileSync(recordsFile, 'utf8'));
+          committed.forEach(r => {
+            if (r.system) committedSystems.add(r.system);
+          });
+        } catch (e) {
+          console.error('Error reading ingress records:', e.message);
+        }
+      }
+
+      const candidates = [];
+      const PROJECT_TITLES = {
+        '003_AuDHD_FieldGuide': 'AuDHD Field Guide UI Components',
+        'xi-io.net': 'xi-io.net Framework Core',
+        '016_Rabbit_r1': 'Rabbit R1 Companion',
+        '012_reality_pools': 'Reality Pools Interactive Simulation',
+        '015_emulator': 'xi-io Emulator Shell',
+        '017_xi-io_inbox': 'xi-io Ingress Inbox Hub',
+        '000_Xibalba': 'Xibalba Mainframe Core',
+        '001_VeilRIFT': 'VeilRIFT Virtual Environment',
+        '002_SAM_LAW': 'SAM Legal Document Classifier'
+      };
+
+      files.forEach(dirent => {
+        if (!dirent.isDirectory() || dirent.name.startsWith('.')) return;
+        
+        const name = dirent.name;
+        let title = PROJECT_TITLES[name];
+        if (!title) {
+          title = name.replace(/^\d+_/g, '').replace(/_/g, ' ');
+          title = title.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+          if (!title.toLowerCase().endsWith('components') && !title.toLowerCase().endsWith('engine') && !title.toLowerCase().endsWith('core')) {
+            title += ' Module';
+          }
+        }
+
+        let system = name.toLowerCase().replace(/^\d+_/g, '').replace(/_|-/g, '');
+        if (name.includes('AuDHD')) system = 'afg';
+        else if (name === 'xi-io.net') system = 'framework';
+        else if (name === '016_Rabbit_r1') system = 'rabbit';
+
+        let status = 'eligible';
+        if (committedSystems.has(system)) {
+          status = 'committed';
+        } else if (name === '.tmp' || name === 'tmp' || name.startsWith('test')) {
+          status = 'degraded';
+        }
+
+        candidates.push({
+          title,
+          system,
+          path: path.join(name, '/'),
+          status
+        });
+      });
+
+      socket.emit('ingress-scan-results', { success: true, candidates });
+    } catch (err) {
+      console.error('[ibal] Ingress scan error:', err.message);
+      socket.emit('ingress-scan-results', { success: false, error: err.message, candidates: [] });
+    }
   });
 
   socket.on('ingress-commit', ({ count, items, path: targetPath }) => {
@@ -1731,4 +1882,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, server, classifyModelCapabilities, recordDiagnostic, recordLedgerEvent, DIAGNOSTICS_FILE, LEDGER_FILE };
+module.exports = { app, server, io, classifyModelCapabilities, recordDiagnostic, recordLedgerEvent, DIAGNOSTICS_FILE, LEDGER_FILE };
