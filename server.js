@@ -4,21 +4,29 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { Server } = require('socket.io');
+const { exec, spawn } = require('child_process');
+
+// Disable TLS validation to support self-signed local certs in workstation loop
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://localhost:11434';
 
-const ALLOWED_ORIGINS = [
-  'https://xi-io.net',
-  'https://localhost:3000',
-  'https://localhost:3001'
-];
+// CORS Check Helper
+function isOriginAllowed(origin) {
+  if (!origin) return false;
+  // Match https://xi-io.net or https://*.xi-io.net
+  if (/^https:\/\/(.*\.)?xi-io\.net$/.test(origin)) return true;
+  // Match http://localhost:PORT or https://localhost:PORT
+  if (/^https?:\/\/localhost(:\d+)?$/.test(origin)) return true;
+  return false;
+}
 
 // CORS Middleware
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+  if (isOriginAllowed(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -43,8 +51,39 @@ app.use((req, res, next) => {
 
 app.use(express.static(path.join(__dirname, 'public')));
 
+// ── XI-IO FRAMEWORK DISTRIBUTION ──────────────────────────────────────────────
+// Serves the xi-io.net shared design system and component library at /framework/
+// This is the single source of truth — ibal never copies framework files.
+// Usage in HTML:  <link rel="stylesheet" href="/framework/styles.css">
+// Usage in JS:    import('/framework/event-feed.js')
+const XIIO_FRAMEWORK_PATH = path.join(__dirname, '..', 'xi-io.net', 'public');
+if (fs.existsSync(XIIO_FRAMEWORK_PATH)) {
+  app.use('/framework', express.static(XIIO_FRAMEWORK_PATH));
+  console.log('[ibal] xi-io framework mounted at /framework from', XIIO_FRAMEWORK_PATH);
+} else {
+  console.warn('[ibal] WARNING: xi-io.net framework not found at', XIIO_FRAMEWORK_PATH);
+  console.warn('[ibal] Ensure xi-io.net repo is checked out at ../xi-io.net relative to this project.');
+}
+
+// ── DEVICE APP SPA FALLBACK ────────────────────────────────────────────────────
+// Any /device/* path that doesn't match a static file serves the device app shell.
+// This allows the device SPA's own hash router to handle sub-routes.
+app.get('/device', (req, res) => {
+  res.redirect('/device/');
+});
+app.get('/device/*', (req, res) => {
+  const deviceIndex = path.join(__dirname, 'public', 'device', 'index.html');
+  if (fs.existsSync(deviceIndex)) {
+    res.sendFile(deviceIndex);
+  } else {
+    res.status(404).send('Device app not yet built. Run the Phase 1 build.');
+  }
+});
+
 // Path to tasks storage
 const TASKS_FILE = path.join(__dirname, 'tasks.json');
+const INBOX_FILE = path.join(__dirname, 'inbox.json');
+const PROPOSALS_FILE = path.join(__dirname, 'proposals.json');
 const DIAGNOSTICS_FILE = path.join(__dirname, 'data', 'diagnostics.jsonl');
 const LEDGER_FILE = path.join(__dirname, 'data', 'events.jsonl');
 
@@ -58,11 +97,195 @@ function ensureDirectoryExists(filePath) {
 // Ensure data folder exists
 ensureDirectoryExists(DIAGNOSTICS_FILE);
 
+// Dynamic loading of validation and storage engine
+let validationEngine = null;
+let storageEngine = null;
+
+import('../xi-io.net/engines/validation/event-atom-validator.mjs')
+  .then(mod => {
+    validationEngine = mod;
+  })
+  .catch(err => {
+    console.warn("Telemetry validation engine not loaded, using fallback schema validator.", err.message);
+  });
+
+import('../xi-io.net/engines/storage/event-storage.mjs')
+  .then(mod => {
+    storageEngine = mod;
+  })
+  .catch(err => {
+    console.warn("Telemetry storage engine not loaded.", err.message);
+  });
+
+// --- Schema Adaptor and Validation Integration for Inbox ---
+let adaptedInboxEventSchema = null;
+let adaptedActionProposalSchema = null;
+
+function adaptSchemaForFramework(schema) {
+  if (!schema) return schema;
+  const adapted = JSON.parse(JSON.stringify(schema));
+  
+  const allowedTopLevel = [
+    '$schema', '$id', 'title', 'description', 'type', 'required', 'properties', 'additionalProperties'
+  ];
+  for (const key of Object.keys(adapted)) {
+    if (!allowedTopLevel.includes(key)) {
+      delete adapted[key];
+    }
+  }
+
+  const allowedPropertyKeywords = ['type', 'const', 'enum', 'items'];
+  if (adapted.properties) {
+    for (const [propName, rules] of Object.entries(adapted.properties)) {
+      if (typeof rules === 'object' && rules !== null) {
+        for (const key of Object.keys(rules)) {
+          if (!allowedPropertyKeywords.includes(key)) {
+            delete rules[key];
+          }
+        }
+        if (rules.type === 'array' && rules.items && typeof rules.items === 'object') {
+          for (const key of Object.keys(rules.items)) {
+            if (key !== 'type') {
+              delete rules.items[key];
+            }
+          }
+        }
+      }
+    }
+  }
+  return adapted;
+}
+
+function loadInboxSchemas() {
+  try {
+    const inboxSchemaPath = path.resolve(__dirname, '../017_xi-io_inbox/schemas/inbox-event.schema.json');
+    const proposalSchemaPath = path.resolve(__dirname, '../017_xi-io_inbox/schemas/action-proposal.schema.json');
+    
+    if (fs.existsSync(inboxSchemaPath)) {
+      const raw = JSON.parse(fs.readFileSync(inboxSchemaPath, 'utf8'));
+      adaptedInboxEventSchema = adaptSchemaForFramework(raw);
+      console.log("Loaded and adapted Inbox Event schema.");
+    } else {
+      console.warn(`Inbox Event schema not found at ${inboxSchemaPath}`);
+    }
+    
+    if (fs.existsSync(proposalSchemaPath)) {
+      const raw = JSON.parse(fs.readFileSync(proposalSchemaPath, 'utf8'));
+      adaptedActionProposalSchema = adaptSchemaForFramework(raw);
+      console.log("Loaded and adapted Action Proposal schema.");
+    } else {
+      console.warn(`Action Proposal schema not found at ${proposalSchemaPath}`);
+    }
+  } catch (err) {
+    console.error("Error loading or adapting inbox schemas:", err);
+  }
+}
+
+function validateInboxEvent(event) {
+  if (!validationEngine) {
+    return { valid: true };
+  }
+  if (!adaptedInboxEventSchema) {
+    return { valid: false, errors: ["Inbox Event Schema is not loaded."] };
+  }
+  return validationEngine.validateAgainstSchema(event, adaptedInboxEventSchema);
+}
+
+function validateActionProposal(proposal) {
+  if (!validationEngine) {
+    return { valid: true };
+  }
+  if (!adaptedActionProposalSchema) {
+    return { valid: false, errors: ["Action Proposal Schema is not loaded."] };
+  }
+  return validationEngine.validateAgainstSchema(proposal, adaptedActionProposalSchema);
+}
+
+loadInboxSchemas();
+
 // Helpers for Recording Diagnostics and Ledger Events
 function recordDiagnostic(severity, source, code, message, detail, suggestedAction, relatedFeature) {
-  const event = {
-    id: `diag_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-    timestamp: new Date().toISOString(),
+  const diagId = `diag_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const parentEvtId = `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  
+  const evidenceId = `ev_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const evidencePath = path.join(__dirname, 'data', 'evidence', `${evidenceId}.json`);
+  const diagDetail = {
+    detail: detail || '',
+    suggestedAction: suggestedAction || '',
+    relatedFeature: relatedFeature || ''
+  };
+
+  ensureDirectoryExists(evidencePath);
+  try {
+    fs.writeFileSync(evidencePath, JSON.stringify(diagDetail, null, 2), 'utf8');
+  } catch (err) {
+    console.error("Failed to write diagnostic evidence file:", err);
+  }
+
+  const failureAtom = {
+    id: diagId,
+    version: "v1",
+    event_atom_id: parentEvtId,
+    product_id: "xi_io_rabbit_mod",
+    repo: "016_Rabbit_r1",
+    source: source || "Rabbit r1 companion",
+    source_kind: "device",
+    command: "node server.js",
+    command_stage: "runtime",
+    raw_evidence_ref: `file://${path.resolve(evidencePath)}`,
+    raw_evidence_preserved: true,
+    detected_at: new Date().toISOString(),
+    failure_class: "RUNTIME_FAILURE",
+    failure_subclass: code || "UNKNOWN_ERROR",
+    failure_message_excerpt: message ? message.substring(0, 100) : "",
+    normalized_summary: message || "",
+    probable_cause: detail || "",
+    suggested_fix_strategy: suggestedAction || "",
+    smallest_safe_next_action: "",
+    blocked_by: [],
+    blocks: [],
+    fingerprint_ref: "",
+    fingerprint_status: "not_created",
+    severity: severity === "critical" || severity === "fatal" ? "critical" : severity === "warning" ? "warning" : "info",
+    recurrence: "first_seen",
+    privacy_level: "internal",
+    risk_level: severity === "critical" || severity === "fatal" ? "critical" : severity === "warning" ? "medium" : "low",
+    confidence: "medium",
+    action_permission: "none",
+    human_approval_required: false,
+    verifier_gate_required: false,
+    status: "detected",
+    receipt_ref: "",
+    feedback_event_refs: [],
+    unknowns: [],
+    blocked_claims: []
+  };
+
+  if (validationEngine) {
+    const check = validationEngine.validateFailureAtom(failureAtom);
+    if (!check.valid) {
+      console.error("FailureAtom validation failed:", check.errors.join('; '));
+    }
+  }
+
+  // Async append via event-storage.mjs, fallback to direct fs.promises.appendFile
+  if (storageEngine) {
+    storageEngine.writeFailureAtom(DIAGNOSTICS_FILE, failureAtom)
+      .catch(err => {
+        console.error("Failed to write failure atom via storage engine:", err);
+      });
+  } else {
+    ensureDirectoryExists(DIAGNOSTICS_FILE);
+    fs.promises.appendFile(DIAGNOSTICS_FILE, JSON.stringify(failureAtom) + '\n', 'utf8')
+      .catch(err => {
+        console.error("Failed to write to diagnostics.jsonl:", err);
+      });
+  }
+
+  const legacyDiag = {
+    id: diagId,
+    timestamp: failureAtom.detected_at,
     severity,
     source,
     code,
@@ -72,42 +295,88 @@ function recordDiagnostic(severity, source, code, message, detail, suggestedActi
     relatedFeature: relatedFeature || ''
   };
 
-  ensureDirectoryExists(DIAGNOSTICS_FILE);
-  try {
-    fs.appendFileSync(DIAGNOSTICS_FILE, JSON.stringify(event) + '\n');
-  } catch (err) {
-    console.error("Failed to write to diagnostics.jsonl:", err);
-  }
-
   if (typeof io !== 'undefined') {
-    io.emit('diagnostic-event', event);
+    io.emit('diagnostic-event', legacyDiag);
   }
 
   // Also emit as a ledger event, avoiding infinite recursion by not calling recordDiagnostic inside recordLedgerEvent
-  recordLedgerEvent('diagnostic.recorded', { diagnosticId: event.id, code: event.code, severity: event.severity });
+  recordLedgerEvent('diagnostic.recorded', { diagnosticId: diagId, code, severity });
 
-  return event;
+  return legacyDiag;
 }
 
 function recordLedgerEvent(type, payload = {}) {
-  const event = {
-    id: `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-    timestamp: new Date().toISOString(),
-    type,
-    payload
+  const eventId = `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const evidenceId = `ev_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const evidencePath = path.join(__dirname, 'data', 'evidence', `${evidenceId}.json`);
+  
+  ensureDirectoryExists(evidencePath);
+  try {
+    fs.writeFileSync(evidencePath, JSON.stringify(payload, null, 2), 'utf8');
+  } catch (err) {
+    console.error("Failed to write evidence file:", err);
+  }
+
+  const eventAtom = {
+    id: eventId,
+    version: "v1",
+    source: `Rabbit r1 companion: ${type}`,
+    source_kind: "device",
+    product_id: "xi_io_rabbit_mod",
+    repo: "016_Rabbit_r1",
+    raw_evidence_ref: `file://${path.resolve(evidencePath)}`,
+    raw_evidence_preserved: true,
+    detected_at: new Date().toISOString(),
+    event_class: type.endsWith('.failed') || type.includes('fail') ? "RUNTIME_FAILURE" : "DEVICE_SIGNAL",
+    event_subclass: type,
+    canonical_tags: ["telemetry"],
+    user_lexicon_tags: [],
+    privacy_level: "internal",
+    risk_level: type.endsWith('.failed') || type.includes('fail') ? "medium" : "low",
+    suggested_persona: "",
+    suggested_bin: "",
+    suggested_action: "",
+    action_permission: "none",
+    human_approval_required: false,
+    status: "detected",
+    confidence: "high",
+    receipt_ref: "",
+    feedback_event_refs: [],
+    unknowns: [],
+    blocked_claims: []
   };
 
-  ensureDirectoryExists(LEDGER_FILE);
-  try {
-    fs.appendFileSync(LEDGER_FILE, JSON.stringify(event) + '\n');
-  } catch (err) {
-    console.error("Failed to write to events.jsonl:", err);
+  if (validationEngine) {
+    const check = validationEngine.validateEventAtom(eventAtom);
+    if (!check.valid) {
+      console.error("EventAtom validation failed:", check.errors.join('; '));
+    }
   }
 
-  if (typeof io !== 'undefined') {
-    io.emit('ledger-event', event);
+  // Async append via event-storage.mjs, fallback to direct fs.promises.appendFile
+  if (storageEngine) {
+    storageEngine.writeEventAtom(LEDGER_FILE, eventAtom)
+      .catch(err => {
+        console.error("Failed to write event atom via storage engine:", err);
+      });
+  } else {
+    ensureDirectoryExists(LEDGER_FILE);
+    fs.promises.appendFile(LEDGER_FILE, JSON.stringify(eventAtom) + '\n', 'utf8')
+      .catch(err => {
+        console.error("Failed to write to events.jsonl:", err);
+      });
   }
-  return event;
+
+  const legacyEvent = Object.assign({}, eventAtom, {
+    timestamp: eventAtom.detected_at,
+    type,
+    payload
+  });
+
+  if (typeof io !== 'undefined') {
+    io.emit('ledger-event', legacyEvent);
+  }
+  return legacyEvent;
 }
 
 // Model Capability Router classification helper
@@ -161,6 +430,59 @@ if (!fs.existsSync(TASKS_FILE)) {
     fs.writeFileSync(TASKS_FILE, JSON.stringify(initialTasks, null, 2));
   } catch (err) {
     console.error("Failed to initialize tasks.json:", err);
+  }
+}
+
+// Initialize inbox.json and proposals.json if they don't exist
+if (!fs.existsSync(INBOX_FILE)) {
+  try {
+    fs.writeFileSync(INBOX_FILE, JSON.stringify([], null, 2));
+  } catch (err) {
+    console.error("Failed to initialize inbox.json:", err);
+  }
+}
+if (!fs.existsSync(PROPOSALS_FILE)) {
+  try {
+    fs.writeFileSync(PROPOSALS_FILE, JSON.stringify([], null, 2));
+  } catch (err) {
+    console.error("Failed to initialize proposals.json:", err);
+  }
+}
+
+// Helpers for reading/writing inbox and proposals
+function readInbox() {
+  try {
+    if (!fs.existsSync(INBOX_FILE)) return [];
+    return JSON.parse(fs.readFileSync(INBOX_FILE, 'utf8'));
+  } catch (err) {
+    console.error("Error reading inbox.json:", err);
+    return [];
+  }
+}
+
+function writeInbox(inbox) {
+  try {
+    fs.writeFileSync(INBOX_FILE, JSON.stringify(inbox, null, 2));
+  } catch (err) {
+    console.error("Error writing inbox.json:", err);
+  }
+}
+
+function readProposals() {
+  try {
+    if (!fs.existsSync(PROPOSALS_FILE)) return [];
+    return JSON.parse(fs.readFileSync(PROPOSALS_FILE, 'utf8'));
+  } catch (err) {
+    console.error("Error reading proposals.json:", err);
+    return [];
+  }
+}
+
+function writeProposals(proposals) {
+  try {
+    fs.writeFileSync(PROPOSALS_FILE, JSON.stringify(proposals, null, 2));
+  } catch (err) {
+    console.error("Error writing proposals.json:", err);
   }
 }
 
@@ -218,21 +540,16 @@ try {
 } catch (err) {
   console.error("CRITICAL SSL INITIALIZATION ERROR:", err.message);
 
-  // Write fatal diagnostic event directly to disk
-  const event = {
-    id: `diag_${Date.now()}_startup`,
-    timestamp: new Date().toISOString(),
-    severity: 'fatal',
-    source: 'server',
-    code: 'SSL_CERT_ERROR',
-    message: 'SSL certificates missing or invalid.',
-    detail: err.message,
-    suggestedAction: 'Run `npm run cert` in the project directory to generate localhost self-signed SSL certificates.',
-    relatedFeature: 'server'
-  };
-
-  ensureDirectoryExists(DIAGNOSTICS_FILE);
-  fs.appendFileSync(DIAGNOSTICS_FILE, JSON.stringify(event) + '\n');
+  // Write fatal diagnostic event via recordDiagnostic
+  recordDiagnostic(
+    'fatal',
+    'server',
+    'SSL_CERT_ERROR',
+    'SSL certificates missing or invalid.',
+    err.message,
+    'Run `npm run cert` in the project directory to generate localhost self-signed SSL certificates.',
+    'server'
+  );
 
   process.exit(1);
 }
@@ -242,7 +559,7 @@ const server = https.createServer(sslOptions, app);
 const io = new Server(server, {
   cors: {
     origin: (origin, callback) => {
-      if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+      if (!origin || isOriginAllowed(origin)) {
         callback(null, true);
       } else {
         callback(new Error('Not allowed by CORS'));
@@ -308,7 +625,333 @@ async function fetchOllamaModels() {
   }
 }
 
+// Dynamic AI proposal generator using Ollama, with rule-based fallback
+async function generateProposalForEvent(event) {
+  const proposalId = `prop_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const sender = event.sender_ref || event.sender || "unknown@example.com";
+  
+  const getRuleBasedProposal = () => {
+    let title = `Process message from ${sender}`;
+    let suggested_action = "create_task";
+    let parameters = {
+      title: event.subject || "New Inbox Task",
+      description: `From: ${sender}\n\n${event.body}`
+    };
+    let confidence = 0.7;
+
+    const lowerBody = (event.body || '').toLowerCase();
+    const lowerSubject = (event.subject || '').toLowerCase();
+    
+    if (lowerSubject.includes('unsubscribe') || lowerBody.includes('newsletter') || lowerSubject.includes('promo')) {
+      suggested_action = "ignore";
+      title = "Ignore promotional email";
+      confidence = 0.9;
+      parameters = {};
+    } else if (lowerSubject.includes('question') || lowerBody.includes('how to') || lowerBody.includes('reply')) {
+      suggested_action = "send_reply";
+      title = `Draft reply to ${sender}`;
+      parameters = {
+        recipient: sender,
+        body: `Hi ${sender.split('@')[0] || 'there'},\n\nThank you for your message. I am looking into this.\n\nBest regards.`
+      };
+      confidence = 0.85;
+    } else if (lowerSubject.includes('bug') || lowerBody.includes('error') || lowerBody.includes('fail')) {
+      parameters.title = `Fix: ${event.subject}`;
+    }
+
+    const getProposalType = (act) => {
+      if (act === 'create_task') return 'task';
+      if (act === 'send_reply') return 'draft_reply';
+      return 'automation';
+    };
+
+    return {
+      id: proposalId,
+      proposal_type: getProposalType(suggested_action),
+      source_event_ids: [event.id],
+      title: title,
+      requires_user_confirmation: true,
+      egress_risk: "low",
+      created_at: new Date().toISOString(),
+      event_id: event.id,
+      suggested_action: suggested_action,
+      parameters: parameters,
+      confidence: confidence,
+      status: "pending"
+    };
+  };
+
+  try {
+    const response = await fetch(`${OLLAMA_HOST}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'llama3',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are ibal, an AI assistant. Analyze the incoming email event and output a JSON response containing an action proposal. The JSON must match this structure exactly:\n{\n  "title": "Short descriptive title of the proposal",\n  "suggested_action": "create_task",\n  "parameters": {\n    "title": "Task title",\n    "description": "Task description"\n  },\n  "confidence": 0.85\n}\nOr if it is a question or reply request, use suggested_action: "send_reply" and parameters: { "recipient": "email", "body": "draft" }.\nOr if it is spam or not actionable, use suggested_action: "ignore".\nDo not output any markdown formatting, thoughts, or explanations. Output ONLY valid raw JSON.'
+          },
+          {
+            role: 'user',
+            content: JSON.stringify({
+              sender: sender,
+              subject: event.subject,
+              body: event.body
+            })
+          }
+        ],
+        stream: false
+      })
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      let text = data.message.content.trim();
+      if (text.startsWith('```')) {
+        text = text.replace(/^```json\s*/, '').replace(/```$/, '').trim();
+      }
+      const parsed = JSON.parse(text);
+      
+      const getProposalType = (act) => {
+        if (act === 'create_task') return 'task';
+        if (act === 'send_reply') return 'draft_reply';
+        return 'automation';
+      };
+
+      const proposal = {
+        id: proposalId,
+        proposal_type: getProposalType(parsed.suggested_action || "create_task"),
+        source_event_ids: [event.id],
+        title: parsed.title || `Action on ${event.subject}`,
+        requires_user_confirmation: true,
+        egress_risk: "low",
+        created_at: new Date().toISOString(),
+        event_id: event.id,
+        suggested_action: parsed.suggested_action || "create_task",
+        parameters: parsed.parameters || {},
+        confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.85,
+        status: "pending"
+      };
+
+      if (proposal.suggested_action === 'create_task') {
+        proposal.parameters.title = proposal.parameters.title || event.subject;
+        proposal.parameters.description = proposal.parameters.description || event.body;
+      } else if (proposal.suggested_action === 'send_reply') {
+        proposal.parameters.recipient = proposal.parameters.recipient || sender;
+        proposal.parameters.body = proposal.parameters.body || 'Draft reply...';
+      }
+
+      return proposal;
+    }
+  } catch (err) {
+    console.warn("Ollama unreachable for proposal generation, using fallback parser:", err.message);
+  }
+
+  return getRuleBasedProposal();
+}
+
+// Self-healing function for Ollama
+async function selfHealOllama() {
+  console.log("Self-healing sequence initiated for Ollama...");
+  
+  // 1. Verify if 'ollama' exists on the PATH
+  const hasOllama = await new Promise((resolve) => {
+    exec('which ollama', (err, stdout) => {
+      if (err || !stdout.trim()) {
+        resolve(false);
+      } else {
+        resolve(true);
+      }
+    });
+  });
+  
+  if (!hasOllama) {
+    console.error("Self-heal failed: 'ollama' command not found in PATH.");
+    recordDiagnostic(
+      'error',
+      'server.ollama',
+      'OLLAMA_NOT_FOUND',
+      'Ollama binary is not installed or not in PATH.',
+      'Unable to run self-healing. Please install Ollama.',
+      'Install Ollama from https://ollama.com',
+      'telemetry'
+    );
+    return false;
+  }
+
+  // Helper to check if Ollama is responsive
+  const checkResponsive = async () => {
+    try {
+      const response = await fetch(`${OLLAMA_HOST}/api/tags`);
+      return response.ok;
+    } catch (e) {
+      return false;
+    }
+  };
+
+  // Check if it's already running
+  if (await checkResponsive()) {
+    console.log("Ollama is already running and responsive.");
+    return true;
+  }
+
+  // 2. Try starting using systemctl
+  console.log("Attempting to start Ollama service via systemctl...");
+  const systemctlSuccess = await new Promise((resolve) => {
+    exec('systemctl start ollama', (err) => {
+      if (err) {
+        console.warn("systemctl start ollama failed:", err.message);
+        resolve(false);
+      } else {
+        console.log("systemctl start ollama executed successfully.");
+        resolve(true);
+      }
+    });
+  });
+
+  if (systemctlSuccess) {
+    // Poll for up to 5 seconds
+    for (let i = 0; i < 5; i++) {
+      await new Promise(r => setTimeout(r, 1000));
+      if (await checkResponsive()) {
+        console.log("Ollama responsive after systemctl start.");
+        return true;
+      }
+    }
+  }
+
+  // 3. Spawning background process 'ollama serve' if systemctl failed or was unavailable
+  console.log("Attempting to spawn 'ollama serve' as a background daemon process...");
+  const child = spawn('ollama', ['serve'], {
+    detached: true,
+    stdio: 'ignore'
+  });
+  child.unref();
+
+  // Poll for up to 10 seconds
+  for (let i = 0; i < 10; i++) {
+    await new Promise(r => setTimeout(r, 1000));
+    if (await checkResponsive()) {
+      console.log("Ollama responsive after spawning ollama serve.");
+      return true;
+    }
+  }
+
+  console.error("Self-healing failed: Ollama is still unreachable after restart attempts.");
+  recordDiagnostic(
+    'error',
+    'server.ollama',
+    'OLLAMA_SELF_HEAL_FAILED',
+    'Self-healing could not start or reach the Ollama service.',
+    'Failed during daemon recovery polling.',
+    'Check Ollama logs or start manually: ollama serve',
+    'telemetry'
+  );
+  return false;
+}
+
 // HTTP REST Routes
+app.post('/api/ollama/self-heal', async (req, res) => {
+  try {
+    const success = await selfHealOllama();
+    if (success) {
+      res.json({ success: true, message: 'Ollama is now online.' });
+    } else {
+      res.status(500).json({ success: false, message: 'Self-healing failed to bring Ollama online.' });
+    }
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/extensions', async (req, res) => {
+  try {
+    const registryPath = path.join(__dirname, '..', 'xi-io.net', 'private', 'manifests', 'projects.json');
+    if (!fs.existsSync(registryPath)) {
+      return res.status(404).json({ success: false, error: 'Registry file projects.json not found' });
+    }
+    const projects = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+    // Ping each healthUrl.test in parallel
+    const results = await Promise.all(projects.map(async (p) => {
+      let status = 'unknown';
+      const testUrl = p.healthUrls?.test;
+      if (testUrl) {
+        try {
+          const r = await fetch(testUrl, { signal: AbortSignal.timeout(2000) });
+          status = r.ok ? 'connected' : 'offline';
+        } catch (err) {
+          status = 'offline';
+        }
+      }
+      return { ...p, status };
+    }));
+    res.json(results);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/inbox', (req, res) => {
+  res.json({
+    events: readInbox(),
+    proposals: readProposals()
+  });
+});
+
+app.post('/api/inbox/simulate', async (req, res) => {
+  try {
+    const { sender, subject, body } = req.body || {};
+    const eventId = `inb_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const event = {
+      id: eventId,
+      event_type: "email.received",
+      provider: "email",
+      provider_type: "email",
+      received_at: new Date().toISOString(),
+      source_ref: `mock_email_${eventId}`,
+      sender_ref: sender || "test@example.com",
+      subject: subject || "Test Ingress Message",
+      body: body || "We need to fix the alignment of the UI layout on the dashboard.",
+      status: "unread"
+    };
+
+    const validation = validateInboxEvent(event);
+    if (!validation.valid) {
+      return res.status(400).json({ success: false, errors: validation.errors });
+    }
+
+    const inbox = readInbox();
+    inbox.push(event);
+    writeInbox(inbox);
+
+    recordLedgerEvent('inbox.received', event);
+
+    const proposal = await generateProposalForEvent(event);
+    const proposalValidation = validateActionProposal(proposal);
+    if (!proposalValidation.valid) {
+      console.error("Action proposal validation failed:", proposalValidation.errors);
+      recordDiagnostic('error', 'server.inbox', 'PROPOSAL_VALIDATION_FAILED', 'Proposal validation failed.', proposalValidation.errors.join('; '), 'Ensure the model output satisfies constraints.', 'inbox');
+    } else {
+      const proposals = readProposals();
+      proposals.push(proposal);
+      writeProposals(proposals);
+      recordLedgerEvent('proposal.generated', proposal);
+    }
+
+    // Update status to processed
+    event.status = 'processed';
+    writeInbox(inbox);
+
+    // Broadcast updated state to all connected socket clients
+    io.emit('inbox-state', { events: readInbox(), proposals: readProposals() });
+
+    res.json({ success: true, event, proposal });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.get('/api/ping', (req, res) => {
   res.json({ status: 'ok', time: new Date() });
 });
@@ -383,6 +1026,138 @@ io.on('connection', (socket) => {
       recordLedgerEvent('model.listed', { count: models.length, models: models.map(m => m.name) });
     } catch (err) {
       socket.emit('models-list', []);
+    }
+  });
+
+  // Handle request for self-healing Ollama
+  socket.on('self-heal-ollama', async () => {
+    try {
+      socket.emit('self-heal-status', { status: 'running', message: 'Attempting to self-heal Ollama...' });
+      const success = await selfHealOllama();
+      if (success) {
+        socket.emit('self-heal-status', { status: 'success', message: 'Ollama self-healed successfully.' });
+        // Retrieve fresh model list to confirm
+        try {
+          const models = await fetchOllamaModels();
+          socket.emit('models-list', models);
+        } catch (e) {}
+      } else {
+        socket.emit('self-heal-status', { status: 'failed', message: 'Failed to self-heal Ollama.' });
+      }
+    } catch (err) {
+      socket.emit('self-heal-status', { status: 'failed', message: err.message });
+    }
+  });
+
+  // Handle request to get the inbox state
+  socket.on('get-inbox', () => {
+    socket.emit('inbox-state', { events: readInbox(), proposals: readProposals() });
+  });
+
+  // Handle inbox simulator event via Socket
+  socket.on('simulate-ingress', async (data) => {
+    try {
+      const { sender, subject, body } = data || {};
+      const eventId = `inb_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const event = {
+        id: eventId,
+        event_type: "email.received",
+        provider: "email",
+        provider_type: "email",
+        received_at: new Date().toISOString(),
+        source_ref: `mock_email_${eventId}`,
+        sender_ref: sender || "test@example.com",
+        subject: subject || "Test Ingress Message",
+        body: body || "We need to fix the alignment of the UI layout on the dashboard.",
+        status: "unread"
+      };
+
+      const validation = validateInboxEvent(event);
+      if (!validation.valid) {
+        console.error("Inbox event validation failed:", validation.errors);
+        socket.emit('ingress-failed', { errors: validation.errors });
+        return;
+      }
+
+      const inbox = readInbox();
+      inbox.push(event);
+      writeInbox(inbox);
+
+      recordLedgerEvent('inbox.received', event);
+
+      // Generate proposal
+      const proposal = await generateProposalForEvent(event);
+      const proposalValidation = validateActionProposal(proposal);
+      if (!proposalValidation.valid) {
+        console.error("Action proposal validation failed:", proposalValidation.errors);
+        recordDiagnostic('error', 'server.inbox', 'PROPOSAL_VALIDATION_FAILED', 'Proposal validation failed.', proposalValidation.errors.join('; '), 'Ensure the model output satisfies constraints.', 'inbox');
+      } else {
+        const proposals = readProposals();
+        proposals.push(proposal);
+        writeProposals(proposals);
+        recordLedgerEvent('proposal.generated', proposal);
+      }
+
+      // Update status to processed
+      event.status = 'processed';
+      writeInbox(inbox);
+
+      // Broadcast updated state to all connected socket clients
+      io.emit('inbox-state', { events: readInbox(), proposals: readProposals() });
+    } catch (err) {
+      console.error("Error during simulate-ingress socket handler:", err);
+    }
+  });
+
+  // Handle action proposal approval
+  socket.on('approve-proposal', (proposalId) => {
+    try {
+      const proposals = readProposals();
+      const index = proposals.findIndex(p => String(p.id) === String(proposalId));
+      if (index !== -1) {
+        const proposal = proposals[index];
+        proposal.status = 'approved';
+        writeProposals(proposals);
+
+        recordLedgerEvent('proposal.approved', { proposalId: proposal.id, action: proposal.suggested_action });
+
+        if (proposal.suggested_action === 'create_task') {
+          const newTask = {
+            id: `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            text: proposal.parameters.title || proposal.title,
+            completed: false,
+            status: 'todo',
+            description: proposal.parameters.description || '',
+            createdAt: new Date().toISOString()
+          };
+          const tasks = readTasks();
+          tasks.push(newTask);
+          writeTasks(tasks);
+          io.emit('tasks', tasks);
+          recordLedgerEvent('task.created', { taskId: newTask.id, text: newTask.text });
+        }
+
+        io.emit('inbox-state', { events: readInbox(), proposals: proposals });
+      }
+    } catch (err) {
+      console.error("Error during approve-proposal socket handler:", err);
+    }
+  });
+
+  // Handle action proposal rejection
+  socket.on('reject-proposal', (proposalId) => {
+    try {
+      const proposals = readProposals();
+      const index = proposals.findIndex(p => String(p.id) === String(proposalId));
+      if (index !== -1) {
+        proposals[index].status = 'rejected';
+        writeProposals(proposals);
+
+        recordLedgerEvent('proposal.rejected', { proposalId: proposalId });
+        io.emit('inbox-state', { events: readInbox(), proposals: proposals });
+      }
+    } catch (err) {
+      console.error("Error during reject-proposal socket handler:", err);
     }
   });
 
@@ -507,7 +1282,7 @@ io.on('connection', (socket) => {
   // Handle task toggle
   socket.on('toggle-task', (taskId) => {
     const tasks = readTasks();
-    const taskIndex = tasks.findIndex(t => t.id === taskId);
+    const taskIndex = tasks.findIndex(t => String(t.id) === String(taskId));
     if (taskIndex !== -1) {
       tasks[taskIndex].completed = !tasks[taskIndex].completed;
       // sync status field
@@ -522,7 +1297,7 @@ io.on('connection', (socket) => {
   // Handle task status update (Kanban drag-and-drop)
   socket.on('update-task-status', ({ taskId, status }) => {
     const tasks = readTasks();
-    const taskIndex = tasks.findIndex(t => t.id === taskId);
+    const taskIndex = tasks.findIndex(t => String(t.id) === String(taskId));
     if (taskIndex !== -1) {
       tasks[taskIndex].status = status;
       tasks[taskIndex].completed = (status === 'done');
@@ -536,7 +1311,7 @@ io.on('connection', (socket) => {
   // Handle task deletion
   socket.on('delete-task', (taskId) => {
     let tasks = readTasks();
-    tasks = tasks.filter(t => t.id !== taskId);
+    tasks = tasks.filter(t => String(t.id) !== String(taskId));
     writeTasks(tasks);
     io.emit('tasks', tasks);
     recordLedgerEvent('task.deleted', { taskId: taskId });
@@ -726,18 +1501,18 @@ io.on('connection', (socket) => {
   });
 
   socket.on('client-diagnostic', (event) => {
-    event.id = event.id || `diag_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    event.timestamp = event.timestamp || new Date().toISOString();
-
-    ensureDirectoryExists(DIAGNOSTICS_FILE);
-    try {
-      fs.appendFileSync(DIAGNOSTICS_FILE, JSON.stringify(event) + '\n');
-    } catch (err) {
-      console.error("Failed to write client diagnostic to disk:", err);
-    }
-
-    socket.broadcast.emit('diagnostic-event', event);
-    recordLedgerEvent('diagnostic.recorded', { diagnosticId: event.id, code: event.code, severity: event.severity, source: event.source });
+    const diag = recordDiagnostic(
+      event.severity || 'info',
+      event.source || 'client',
+      event.code || 'CLIENT_ERROR',
+      event.message || '',
+      event.detail || '',
+      event.suggestedAction || '',
+      event.relatedFeature || ''
+    );
+    // Since recordDiagnostic already logs to diagnostics.jsonl, emits diagnostic-event, and records the ledger event,
+    // we only need to broadcast the event to other connected clients here.
+    socket.broadcast.emit('diagnostic-event', diag);
   });
 
   socket.on('disconnect', () => {
@@ -755,4 +1530,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, server, classifyModelCapabilities };
+module.exports = { app, server, classifyModelCapabilities, recordDiagnostic, recordLedgerEvent, DIAGNOSTICS_FILE, LEDGER_FILE };

@@ -1,0 +1,49 @@
+<div class="page-shell">
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">system alerts</p>
+      <h2>Diagnostics</h2>
+      <p class="muted">System telemetry, live event log, and self-healing controls.</p>
+    </div>
+    <div class="topbar-actions">
+      <button class="button button-primary" id="run-heal-diag-btn" type="button">Run Self-Healing</button>
+    </div>
+  </header>
+
+  <div class="status-grid">
+    <article class="metric-card">
+      <span class="metric-label">CPU Usage</span>
+      <strong class="metric-value" id="diag-cpu">—</strong>
+    </article>
+    <article class="metric-card">
+      <span class="metric-label">Memory Used</span>
+      <strong class="metric-value" id="diag-mem">—</strong>
+    </article>
+    <article class="metric-card">
+      <span class="metric-label">Ollama</span>
+      <strong class="metric-value" id="diag-ollama">—</strong>
+    </article>
+    <article class="metric-card">
+      <span class="metric-label">Uptime</span>
+      <strong class="metric-value" id="diag-uptime">—</strong>
+    </article>
+  </div>
+
+  <section class="panel">
+    <div class="panel-header"><div><p class="eyebrow">live</p><h3>System Event Log</h3></div></div>
+    <div id="diag-log" style="max-height:320px; overflow-y:auto; background:rgba(0,0,0,.18); border:1px solid var(--border); border-radius:var(--radius); padding:12px; font-family:var(--font-mono,monospace); font-size:0.85rem; color:var(--muted); display:grid; gap:4px;">
+      <span>Waiting for system events…</span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-header"><div><p class="eyebrow">recovery</p><h3>Self-Healing Controls</h3></div></div>
+    <p class="muted">Trigger manual service recovery. The self-healing engine attempts to restart Ollama and verify connectivity.</p>
+    <div id="diag-heal-status" style="margin-top:8px; color:var(--muted); font-size:0.88rem;"></div>
+    <div class="pill-row" style="margin-top:12px;">
+      <button class="button button-primary" id="diag-heal-ollama-btn" type="button">Restart Ollama</button>
+      <button class="button button-secondary" id="diag-simulate-ingress-btn" type="button">Simulate Ingress</button>
+    </div>
+  </section>
+</div>
+

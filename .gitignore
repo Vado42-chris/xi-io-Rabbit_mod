@@ -4,3 +4,7 @@ cert.pem
 .DS_Store
 .vscode/
 data/
+inbox.json
+proposals.json
+tasks.json
+events.jsonl

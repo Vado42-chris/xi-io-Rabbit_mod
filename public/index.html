@@ -2,255 +2,196 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>R1 Local Companion</title>
-  <!-- Google Fonts for Teenage Engineering Aesthetic -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="xi-io: ibal — Ecosystem operator console. Manage connected apps, extensions, AI models, and device experiences.">
+  <title>xi-io: ibal</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=VT323&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/framework/styles.css">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div id="workspace">
-    <!-- LEFT PANE: Desktop Workspace Controls -->
-    <aside id="desktop-control-panel">
-      <!-- Telemetry & Ollama Status -->
-      <section class="panel-section telemetry-panel">
-        <h3>SYSTEM TELEMETRY & OLLAMA</h3>
-        <div class="telemetry-grid">
-          <div class="stat-card">
-            <span class="stat-label">CPU LOAD</span>
-            <span class="stat-value" id="cpu-value">--%</span>
-            <span class="stat-sub" id="cpu-detail">-- Cores</span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">RAM USED</span>
-            <span class="stat-value" id="ram-value">--%</span>
-            <span class="stat-sub" id="ram-detail">-- / -- GB</span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">SYSTEM UPTIME</span>
-            <span class="stat-value" id="uptime-value">--h</span>
-            <span class="stat-sub">Since Boot</span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">OLLAMA STATUS</span>
-            <span class="stat-value" id="ollama-status">CHECKING</span>
-            <span class="stat-sub" id="active-model-display">No model loaded</span>
-          </div>
-        </div>
-        
-        <div class="model-manager">
-          <h4>Model Management</h4>
-          <div class="pull-input-group">
-            <input type="text" id="pull-model-input" placeholder="e.g. llama3" autocomplete="off">
-            <button id="pull-model-btn">PULL</button>
-          </div>
-          <div id="pull-progress-container" class="hidden">
-            <div class="progress-bar-wrapper">
-              <div id="pull-progress-bar" style="width: 0%"></div>
-            </div>
-            <span id="pull-progress-text">Pulling...</span>
-          </div>
-          <div class="available-models-box">
-            <label for="desktop-model-select">Active Model:</label>
-            <select id="desktop-model-select">
-              <option value="llama3">llama3 (Default)</option>
-              <option value="phi3">phi3</option>
-              <option value="llava">llava (Vision)</option>
-            </select>
-            <div id="desktop-model-capabilities" class="capabilities-container"></div>
-          </div>
-        </div>
-      </section>
+<div id="app-shell">
 
-      <!-- Kanban Board -->
-      <section class="panel-section kanban-panel">
-        <h3>PRODUCTIVITY KANBAN</h3>
-        <div class="kanban-board">
-          <div class="kanban-column" id="col-todo" data-status="todo">
-            <div class="column-header">TODO</div>
-            <div class="column-cards" id="cards-todo"></div>
-          </div>
-          <div class="kanban-column" id="col-progress" data-status="progress">
-            <div class="column-header">IN PROGRESS</div>
-            <div class="column-cards" id="cards-progress"></div>
-          </div>
-          <div class="kanban-column" id="col-done" data-status="done">
-            <div class="column-header">DONE</div>
-            <div class="column-cards" id="cards-done"></div>
-          </div>
-        </div>
-        <div class="kanban-actions">
-          <input type="text" id="kanban-new-task" placeholder="Add task to Kanban..." autocomplete="off">
-          <button id="kanban-add-btn">Add Task</button>
-        </div>
-      </section>
+  <!-- ── TOP BAR ────────────────────────────────────────────── -->
+  <header id="top-bar" role="banner">
+    <div class="topbar-start">
+      <button id="sidebar-toggle-btn" class="icon-btn" aria-label="Toggle sidebar" title="Toggle sidebar">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          <rect y="3" width="18" height="2" rx="1" fill="currentColor"/>
+          <rect y="8" width="18" height="2" rx="1" fill="currentColor"/>
+          <rect y="13" width="18" height="2" rx="1" fill="currentColor"/>
+        </svg>
+      </button>
+      <a href="#/extensions" class="brand" id="brand-link" aria-label="xi-io: ibal home">
+        <span class="brand-prefix">xi-io:</span><span class="brand-name">ibal</span>
+      </a>
+      <div class="breadcrumb" aria-label="Current section">
+        <span class="breadcrumb-sep">›</span>
+        <span id="breadcrumb-text">Extensions</span>
+      </div>
+    </div>
+    <div class="topbar-end">
+      <div class="status-cluster">
+        <span id="conn-dot" class="conn-dot offline" aria-hidden="true"></span>
+        <span id="conn-label" class="conn-label">OFFLINE</span>
+        <span id="health-pill" class="health-pill unknown">UNKNOWN</span>
+      </div>
+      <div class="eco-status" title="Connected ecosystem apps" id="eco-status">
+        <span id="eco-dot" class="eco-dot"></span>
+        <span id="eco-count">0 connected</span>
+      </div>
+      <button id="preview-toggle-btn" class="preview-toggle-btn" aria-label="Toggle device preview" title="Toggle device preview">
+        <span id="preview-toggle-icon" aria-hidden="true">◀</span>
+        <span class="preview-toggle-label">Preview</span>
+      </button>
+    </div>
+  </header>
 
-      <!-- Activity logs / Terminal console -->
-      <section class="panel-section logs-panel">
-        <h3>REAL-TIME SERVICE LOGS</h3>
-        <div id="logs-container" class="terminal-text">
-          <div class="log-entry system">System initialized. Ready for connections.</div>
+  <!-- ── MAIN LAYOUT ────────────────────────────────────────── -->
+  <div id="main-layout">
+
+    <!-- Left sidebar -->
+    <nav id="sidebar" role="navigation" aria-label="Management navigation">
+      <div class="sidebar-section" role="list">
+        <a href="#/extensions" class="nav-item active" data-page="extensions" id="nav-extensions" role="listitem">
+          <span class="nav-icon" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M7 2H2v5h5V2zM16 2h-5v5h5V2zM7 11H2v5h5v-5zM14 11h-2v2h-2v2h2v2h2v-2h2v-2h-2v-2z" fill="currentColor"/></svg>
+          </span>
+          <span class="nav-label">Extensions</span>
+        </a>
+        <a href="#/connections" class="nav-item" data-page="connections" id="nav-connections" role="listitem">
+          <span class="nav-icon" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="4" cy="9" r="2.5" stroke="currentColor" stroke-width="1.5"/><circle cx="14" cy="4" r="2.5" stroke="currentColor" stroke-width="1.5"/><circle cx="14" cy="14" r="2.5" stroke="currentColor" stroke-width="1.5"/><line x1="6.2" y1="7.8" x2="11.8" y2="5.2" stroke="currentColor" stroke-width="1.5"/><line x1="6.2" y1="10.2" x2="11.8" y2="12.8" stroke="currentColor" stroke-width="1.5"/></svg>
+          </span>
+          <span class="nav-label">Connections</span>
+        </a>
+        <a href="#/model-config" class="nav-item" data-page="model-config" id="nav-model-config" role="listitem">
+          <span class="nav-icon" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="2" y="5" width="14" height="8" rx="2" stroke="currentColor" stroke-width="1.5"/><circle cx="9" cy="9" r="2" fill="currentColor"/><line x1="9" y1="2" x2="9" y2="5" stroke="currentColor" stroke-width="1.5"/><line x1="9" y1="13" x2="9" y2="16" stroke="currentColor" stroke-width="1.5"/></svg>
+          </span>
+          <span class="nav-label">Model Config</span>
+        </a>
+        <a href="#/notifications" class="nav-item" data-page="notifications" id="nav-notifications" role="listitem">
+          <span class="nav-icon" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 2a5 5 0 0 0-5 5v3l-1.5 2.5h13L14 10V7a5 5 0 0 0-5-5z" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M7.5 14.5a1.5 1.5 0 0 0 3 0" stroke="currentColor" stroke-width="1.5"/></svg>
+          </span>
+          <span class="nav-label">Notifications</span>
+          <span class="nav-badge hidden" id="notif-badge">0</span>
+        </a>
+      </div>
+
+      <div class="sidebar-divider" aria-hidden="true"></div>
+
+      <div class="sidebar-section" role="list">
+        <a href="#/diagnostics" class="nav-item" data-page="diagnostics" id="nav-diagnostics" role="listitem">
+          <span class="nav-icon" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><polyline points="2,12 5,7 8,10 11,4 14,8 16,6" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linejoin="round"/></svg>
+          </span>
+          <span class="nav-label">Diagnostics</span>
+        </a>
+        <a href="#/account" class="nav-item" data-page="account" id="nav-account" role="listitem">
+          <span class="nav-icon" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="6" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M3 16c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+          </span>
+          <span class="nav-label">Account</span>
+        </a>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="runtime-level" title="ibal runtime maturity level">
+          <span class="level-label">RUNTIME</span>
+          <span class="level-badge" id="runtime-level-badge">L2</span>
         </div>
-      </section>
+      </div>
+    </nav>
+
+    <!-- Content area (pages load here) -->
+    <main id="content-area" role="main" aria-live="polite" aria-label="Management console content">
+      <div id="page-loading" class="page-loading">
+        <div class="spinner-ring"></div>
+        <p>Loading...</p>
+      </div>
+    </main>
+
+    <!-- Preview pane -->
+    <aside id="preview-pane" role="complementary" aria-label="Device app preview">
+      <div class="preview-header">
+        <span class="preview-section-label">DEVICE PREVIEW</span>
+        <div class="preview-controls">
+          <select id="device-resolution-select" title="Select target device resolution" aria-label="Device resolution">
+            <optgroup label="Phone">
+              <option value="390x844">iPhone 14 (390×844)</option>
+              <option value="360x800">Android (360×800)</option>
+              <option value="428x926">iPhone Plus (428×926)</option>
+            </optgroup>
+            <optgroup label="Compact">
+              <option value="480x480">R1 / Square (480×480)</option>
+            </optgroup>
+            <optgroup label="Tablet">
+              <option value="768x1024" selected>iPad Generic (768×1024)</option>
+              <option value="820x1180">iPad Air (820×1180)</option>
+              <option value="1024x1366">iPad Pro (1024×1366)</option>
+            </optgroup>
+            <optgroup label="Desktop">
+              <option value="1280x800">Laptop (1280×800)</option>
+              <option value="1440x900">Wide Desktop (1440×900)</option>
+              <option value="1920x1080">Full HD (1920×1080)</option>
+            </optgroup>
+            <optgroup label="10-Foot / TV">
+              <option value="1920x1080">TV HD (1920×1080)</option>
+              <option value="3840x2160">4K (3840×2160)</option>
+            </optgroup>
+          </select>
+          <select id="preview-url-select" title="App to preview" aria-label="App to preview">
+            <option value="/device/">xi-io: ibal (device)</option>
+          </select>
+        </div>
+      </div>
+      <div id="device-frame-wrapper" role="img" aria-label="Device app preview viewport">
+        <iframe
+          id="preview-iframe"
+          src="/device/"
+          title="Device app preview"
+          sandbox="allow-scripts allow-same-origin allow-forms"
+          loading="lazy"
+        ></iframe>
+        <div class="resolution-badge" id="resolution-badge" aria-live="polite">768 × 1024</div>
+      </div>
     </aside>
 
-    <!-- RIGHT PANE: Interactive R1 Hardware Chassis -->
-    <section id="hardware-simulator">
-      <!-- Physical PTT button on the left of R1 frame -->
-      <div id="physical-ptt" class="hardware-button" title="Hold to talk (PTT)"></div>
-      
-      <div id="r1-chassis">
-        <!-- Top Scroll Wheel & Camera Eye area -->
-        <div class="r1-header-hardware">
-          <!-- Rotatable Camera Eye -->
-          <div id="r1-camera-eye" class="camera-eye" title="Rotate Camera Eye">
-            <div class="lens"></div>
-          </div>
-          
-          <!-- Scroll Wheel -->
-          <div class="scroll-wheel-wrapper">
-            <button class="scroll-wheel-btn scroll-up" id="wheel-up-btn" title="Scroll Up">▲</button>
-            <div id="r1-scroll-wheel" class="scroll-wheel" title="Interactive Scroll Wheel">
-              <div id="r1-scroll-ridges" class="scroll-ridges"></div>
-            </div>
-            <button class="scroll-wheel-btn scroll-down" id="wheel-down-btn" title="Scroll Down">▼</button>
-          </div>
-        </div>
+  </div><!-- /#main-layout -->
+</div><!-- /#app-shell -->
 
-        <!-- Screen Container -->
-        <div id="r1-screen-container">
-          <div id="app-container">
-            <!-- Header -->
-            <header class="app-header">
-              <div class="logo">R1.local</div>
-              <div class="status-indicator">
-                <span id="conn-dot" class="dot disconnected"></span>
-                <span id="status-text">DISCONNECTED</span>
-                <span id="health-indicator" class="health-pill healthy">HEALTHY</span>
-              </div>
-            </header>
-
-            <!-- Main Viewport (320x320 boundary active inside container) -->
-            <main id="viewport">
-              <!-- Screen 1: Dashboard -->
-              <section id="screen-dashboard" class="screen active">
-                <div class="project-pill">PROJECT: xi-io.net</div>
-                
-                <div class="menu-list">
-                  <div class="menu-item active" data-target="screen-chat" id="menu-chat">
-                    <span class="menu-icon">🎙️</span>
-                    <span class="menu-label">Voice Assistant</span>
-                  </div>
-                  <div class="menu-item" data-target="screen-tasks" id="menu-tasks">
-                    <span class="menu-icon">📋</span>
-                    <span class="menu-label">Project Tasks</span>
-                    <span class="badge" id="task-badge">0</span>
-                  </div>
-                  <div class="menu-item" data-target="screen-camera" id="menu-camera">
-                    <span class="menu-icon">📷</span>
-                    <span class="menu-label">Vision Scan</span>
-                  </div>
-                </div>
-
-                <div class="settings-box" style="flex-direction: column; align-items: stretch; gap: 4px;">
-                  <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <label for="model-select">AI MODEL:</label>
-                    <select id="model-select">
-                      <option value="llama3">llama3 (Default)</option>
-                      <option value="phi3">phi3</option>
-                      <option value="llava">llava (Vision)</option>
-                    </select>
-                  </div>
-                  <div id="model-capabilities" class="capabilities-container device-caps"></div>
-                </div>
-              </section>
-
-              <!-- Screen 2: Task List (Productivity) -->
-              <section id="screen-tasks" class="screen">
-                <div class="screen-header">
-                  <button class="back-btn" data-target="screen-dashboard">← BACK</button>
-                  <h2>XI-IO.NET TASKS</h2>
-                </div>
-                <div id="tasks-scroll-container" class="scroll-list">
-                  <!-- Dynamically populated tasks -->
-                  <div class="loading-text">Loading workspace...</div>
-                </div>
-                <div class="task-input-bar">
-                  <input type="text" id="new-task-input" placeholder="New task..." autocomplete="off">
-                  <button id="add-task-btn">+</button>
-                </div>
-              </section>
-
-              <!-- Screen 3: AI Chat/Voice Assistant -->
-              <section id="screen-chat" class="screen">
-                <div class="screen-header">
-                  <button class="back-btn" data-target="screen-dashboard">← BACK</button>
-                  <h2>ASSISTANT</h2>
-                </div>
-                
-                <div id="chat-output" class="terminal-text">
-                  Ready for prompt. Press and hold PTT below, or use physical keys.
-                </div>
-
-                <div class="voice-controls">
-                  <div id="visualizer-container">
-                    <div class="bar"></div>
-                    <div class="bar"></div>
-                    <div class="bar"></div>
-                    <div class="bar"></div>
-                    <div class="bar"></div>
-                  </div>
-                  <button id="ptt-btn" class="ptt-trigger">PUSH TO TALK</button>
-                  <div class="ptt-hint">Or hold Spacebar / Volume keys</div>
-                </div>
-              </section>
-
-              <!-- Screen 4: Vision Scan -->
-              <section id="screen-camera" class="screen">
-                <div class="screen-header">
-                  <button class="back-btn" data-target="screen-dashboard">← BACK</button>
-                  <h2>VISION SCAN</h2>
-                </div>
-
-                <div class="camera-viewport">
-                  <video id="camera-feed" autoplay playsinline></video>
-                  <canvas id="photo-canvas" style="display: none;"></canvas>
-                  <div id="vision-overlay" class="vision-scanline"></div>
-                </div>
-
-                <div class="camera-controls">
-                  <button id="capture-btn">SCAN IMAGE</button>
-                </div>
-
-                <div id="vision-result" class="terminal-text hidden">
-                  Waiting for capture...
-                </div>
-              </section>
-            </main>
-
-            <!-- Footer Page Indicator Dot Navigation -->
-            <footer class="app-footer">
-              <div class="navigation-dots">
-                <span class="nav-dot active" data-screen="screen-dashboard"></span>
-                <span class="nav-dot" data-screen="screen-chat"></span>
-                <span class="nav-dot" data-screen="screen-tasks"></span>
-                <span class="nav-dot" data-screen="screen-camera"></span>
-              </div>
-            </footer>
-          </div>
-        </div>
-        
-        <!-- Brand Logo on Chassis -->
-        <div class="r1-brand">rabbit</div>
+<!-- ── DIAGNOSTIC MODAL ───────────────────────────────────── -->
+<div id="troubleshooting-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 id="modal-title">⚠ SYSTEM DIAGNOSTIC</h3>
+      <button id="close-modal-btn" class="icon-btn" aria-label="Close diagnostic dialog">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="modal-alert-msg" id="modal-alert-msg">Service connectivity issue detected.</p>
+      <div class="diagnostic-details">
+        <div class="diagnostic-row"><strong>Service</strong><span id="diag-service">ollama.service</span></div>
+        <div class="diagnostic-row"><strong>Status</strong><span id="diag-status" class="status-offline">Offline</span></div>
+        <div class="diagnostic-row"><strong>Error</strong><span id="diag-error">ECONNREFUSED 127.0.0.1:11434</span></div>
+        <div class="diagnostic-row"><strong>Checked</strong><span id="diag-time">Never</span></div>
       </div>
-    </section>
+      <p class="modal-advice">Click below to attempt automatic service recovery.</p>
+      <button id="run-self-heal-btn" class="btn btn-primary">Run Self-Healing Diagnostics</button>
+      <div id="heal-progress" class="hidden heal-progress">
+        <div class="spinner-ring small"></div>
+        <span id="heal-progress-msg">Attempting recovery...</span>
+      </div>
+    </div>
   </div>
+</div>
 
-  <!-- Socket.io connection client -->
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="device-adapter.js"></script>
-  <script src="app.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+<script src="router.js"></script>
+<script src="viewport-preview.js"></script>
+<script src="app.js"></script>
 </body>
 </html>

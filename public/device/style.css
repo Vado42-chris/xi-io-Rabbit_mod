@@ -1,0 +1,161 @@
+/*
+ * xi-io: ibal — Device App Styles
+ * Loads AFTER /framework/styles.css
+ * Touch-first, self-contained. No management console layout classes here.
+ *
+ * Custom property: --device-app-origin documents this app's origin for
+ * future postMessage sandboxing between management console iframe and device app.
+ */
+
+:root {
+  --device-app-origin: 'https://localhost:3000/device/';
+  --accent: #ff5722;
+  --accent-soft: rgba(255, 87, 34, 0.10);
+  --font-sans: 'Outfit', 'Inter', system-ui, sans-serif;
+  --font-mono: 'VT323', 'SFMono-Regular', monospace;
+  --device-header-h: 52px;
+  --device-nav-h: 64px;
+  --touch-target: 44px; /* WCAG minimum touch target */
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--font-sans);
+}
+
+/* ── DEVICE SHELL ──────────────────────────────────────────────────── */
+#device-shell {
+  display: grid;
+  grid-template-rows: var(--device-header-h) 1fr var(--device-nav-h);
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ── DEVICE HEADER ─────────────────────────────────────────────────── */
+#device-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  background: var(--panel-strong, rgba(14,19,22,.96));
+  border-bottom: 1px solid var(--border);
+  z-index: 10;
+}
+
+.device-brand { font-weight: 800; font-size: 1.05rem; letter-spacing: -0.03em; }
+.device-brand .brand-prefix { color: var(--muted); }
+.device-brand .brand-name   { color: var(--accent); }
+
+.device-header-actions { display: flex; align-items: center; gap: 8px; }
+
+.conn-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.conn-dot.online  { background: var(--ok, #6fd6ad); box-shadow: 0 0 5px var(--ok, #6fd6ad); }
+.conn-dot.offline { background: var(--danger, #db7272); }
+
+.device-icon-btn { background: none; border: 1px solid transparent; color: var(--muted); border-radius: 8px; min-width: var(--touch-target); min-height: var(--touch-target); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.15s, color 0.15s; }
+.device-icon-btn:hover { background: rgba(255,255,255,.06); color: var(--text); }
+
+/* ── DEVICE CONTENT ────────────────────────────────────────────────── */
+#device-content {
+  overflow-y: auto;
+  overflow-x: hidden;
+  height: 100%;
+  padding: 16px;
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.device-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; height: 150px; color: var(--muted); }
+
+/* ── DEVICE BOTTOM NAV ─────────────────────────────────────────────── */
+#device-nav {
+  display: flex;
+  align-items: stretch;
+  background: var(--panel-strong, rgba(14,19,22,.96));
+  border-top: 1px solid var(--border);
+  z-index: 10;
+}
+
+.device-nav-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 6px 4px;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  min-height: var(--device-nav-h);
+  position: relative;
+  transition: color 0.14s;
+}
+.device-nav-item:hover { color: var(--text); text-decoration: none; }
+.device-nav-item.active { color: var(--accent); }
+.device-nav-item.active svg { filter: drop-shadow(0 0 4px var(--accent-glow, rgba(255,87,34,.4))); }
+
+.device-nav-badge { position: absolute; top: 6px; right: calc(50% - 18px); background: var(--accent); color: #fff; font-size: 0.6rem; font-weight: 700; padding: 1px 5px; border-radius: 999px; }
+.device-nav-badge.hidden { display: none; }
+
+/* ── DEVICE SCREEN SHELLS ──────────────────────────────────────────── */
+.device-screen { display: grid; gap: 14px; align-content: start; }
+.device-screen-header { display: flex; align-items: center; justify-content: space-between; }
+.device-screen-header h2 { margin: 0; font-size: 1.2rem; font-weight: 700; }
+
+/* Proposal cards */
+.proposal-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; display: grid; gap: 10px; }
+.proposal-card.high-confidence { border-color: rgba(111,214,173,.25); }
+.proposal-actions { display: flex; gap: 8px; }
+.proposal-actions .button { min-height: var(--touch-target); flex: 1; }
+.proposal-confidence { font-size: 0.72rem; color: var(--muted); }
+
+/* Task items */
+.task-item { display: flex; align-items: center; gap: 12px; padding: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); }
+.task-check { width: 20px; height: 20px; border: 2px solid var(--border); border-radius: 4px; flex-shrink: 0; cursor: pointer; }
+.task-item.done .task-check { background: var(--accent); border-color: var(--accent); }
+.task-item.done .task-text { text-decoration: line-through; color: var(--muted); }
+.task-text { flex: 1; font-size: 0.9rem; }
+
+/* Chat / assistant */
+.chat-bubble { padding: 10px 14px; border-radius: 12px; max-width: 85%; font-size: 0.9rem; line-height: 1.45; }
+.chat-bubble.user { background: var(--accent-soft); border: 1px solid rgba(255,87,34,.2); color: var(--text); align-self: flex-end; }
+.chat-bubble.ai { background: var(--panel); border: 1px solid var(--border); color: var(--text); align-self: flex-start; }
+.chat-messages { display: flex; flex-direction: column; gap: 8px; }
+
+/* PTT button */
+.ptt-btn { width: 72px; height: 72px; border-radius: 50%; background: var(--accent); border: none; color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 0 0 0 var(--accent-glow, rgba(255,87,34,.4)); transition: transform 0.1s, box-shadow 0.2s; }
+.ptt-btn:active { transform: scale(0.94); box-shadow: 0 0 0 14px rgba(255,87,34,.0); }
+.ptt-btn.recording { box-shadow: 0 0 0 8px var(--accent-glow, rgba(255,87,34,.3)); animation: pulse 1s infinite; }
+@keyframes pulse { 0%,100% { box-shadow: 0 0 0 4px rgba(255,87,34,.3); } 50% { box-shadow: 0 0 0 12px rgba(255,87,34,.1); } }
+
+/* Spinner (re-declared for device app self-containment) */
+.spinner-ring { width: 24px; height: 24px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── RESPONSIVE (tablet+ layout) ──────────────────────────────────── */
+@media (min-width: 768px) {
+  /* On tablet, use side navigation instead of bottom nav */
+  #device-shell {
+    grid-template-columns: 72px 1fr;
+    grid-template-rows: var(--device-header-h) 1fr;
+    grid-template-areas: "nav header" "nav content";
+  }
+  #device-header { grid-area: header; }
+  #device-content { grid-area: content; }
+  #device-nav {
+    grid-area: nav;
+    flex-direction: column;
+    border-top: none;
+    border-right: 1px solid var(--border);
+    padding: 8px 0;
+    height: 100%;
+  }
+  .device-nav-item { font-size: 0; min-height: var(--touch-target); padding: 12px 0; } /* Icons only on tablet sidebar */
+  .device-nav-item svg { width: 22px; height: 22px; }
+}

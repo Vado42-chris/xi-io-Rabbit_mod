@@ -1,0 +1,52 @@
+<div class="page-shell">
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">AI runtime</p>
+      <h2>Model Config</h2>
+      <p class="muted">Manage local Ollama models, set routing preferences, and configure the ibal AI orchestration layer.</p>
+    </div>
+    <div class="topbar-actions">
+      <button class="button button-secondary" id="refresh-models-btn" type="button">Refresh</button>
+    </div>
+  </header>
+
+  <div class="status-grid" id="model-metrics-grid">
+    <article class="metric-card" id="ollama-status-card" style="cursor:pointer;" title="Click to open diagnostics">
+      <span class="metric-label">Ollama</span>
+      <strong class="metric-value" id="model-ollama-status">Checking…</strong>
+    </article>
+    <article class="metric-card">
+      <span class="metric-label">Loaded Models</span>
+      <strong class="metric-value" id="model-count">—</strong>
+    </article>
+    <article class="metric-card">
+      <span class="metric-label">Active Model</span>
+      <strong class="metric-value" id="model-active" style="font-size:1rem;">—</strong>
+    </article>
+    <article class="metric-card">
+      <span class="metric-label">Strategy</span>
+      <strong class="metric-value" style="font-size:1rem; color:var(--accent);">rule-then-llm</strong>
+    </article>
+  </div>
+
+  <section class="panel" id="models-list-panel">
+    <div class="panel-header">
+      <div><p class="eyebrow">local models</p><h3>Available Models</h3></div>
+    </div>
+    <div id="models-list-grid" class="project-grid">
+      <p class="muted">Loading model list…</p>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-header"><div><p class="eyebrow">routing</p><h3>Model Router</h3></div></div>
+    <p class="muted">The MODEL_ROUTER selects which model handles a given request type. See <code>docs/MODEL_ROUTER.md</code> for the full routing table.</p>
+    <div class="pill-row" style="margin-top:8px;">
+      <span class="pill pill-ok">rule-based fallback</span>
+      <span class="pill pill-warning">LLM primary</span>
+      <span class="pill pill-neutral">self-healing enabled</span>
+    </div>
+  </section>
+</div>
+
+

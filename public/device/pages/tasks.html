@@ -1,0 +1,26 @@
+<div class="device-screen">
+  <div class="device-screen-header">
+    <h2>Tasks</h2>
+    <button class="button button-secondary" style="font-size:0.78rem;padding:6px 10px;" onclick="window.ibalDevice?.requestTasks()">Sync</button>
+  </div>
+  <div id="tasks-list-container"><p class="muted">Loading tasks…</p></div>
+</div>
+
+<script>
+(function() {
+  function render(tasks) {
+    const el = document.getElementById('tasks-list-container');
+    if (!el) return;
+    const list = tasks || [];
+    el.innerHTML = list.length
+      ? list.map(t => `<div class="task-item ${t.status==='done'?'done':''}">
+          <div class="task-check" data-action="toggle-task" data-id="${t.id}" role="checkbox" aria-checked="${t.status==='done'}" tabindex="0"></div>
+          <span class="task-text">${t.title||t.description||'Task'}</span>
+          <span class="pill ${t.priority==='high'?'pill-danger':t.priority==='medium'?'pill-warning':'pill-neutral'}">${t.priority||'—'}</span>
+        </div>`).join('')
+      : '<p class="muted">No tasks yet. Approve a proposal from Inbox to create one.</p>';
+  }
+  window.addEventListener('ibal:tasks-updated', e => render(e.detail));
+  render(window.ibalState?.tasks);
+})();
+</script>

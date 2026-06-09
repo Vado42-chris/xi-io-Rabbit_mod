@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="xi-io: ibal — Your personal AI task and inbox manager. Runs on any device.">
+  <title>xi-io: ibal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=VT323&display=swap" rel="stylesheet">
+  <!-- xi-io.net framework design system (served by ibal's server.js at /framework/) -->
+  <link rel="stylesheet" href="/framework/styles.css">
+  <!-- Device app overrides and touch-first layout -->
+  <link rel="stylesheet" href="/device/style.css">
+</head>
+<body>
+<div id="device-shell">
+
+  <!-- ── DEVICE APP HEADER ─────────────────────────────────────────── -->
+  <header id="device-header">
+    <span class="device-brand"><span class="brand-prefix">xi-io:</span><span class="brand-name">ibal</span></span>
+    <div class="device-header-actions">
+      <span id="device-conn-dot" class="conn-dot offline" aria-hidden="true"></span>
+      <button id="device-ai-btn" class="device-icon-btn" aria-label="Open AI assistant" title="AI Assistant">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.5"/><path d="M7 10h6M10 7v6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ── SCREEN CONTENT ─────────────────────────────────────────────── -->
+  <main id="device-content" role="main" aria-live="polite">
+    <div class="device-loading">
+      <div class="spinner-ring"></div>
+      <p>Loading…</p>
+    </div>
+  </main>
+
+  <!-- ── BOTTOM NAVIGATION ──────────────────────────────────────────── -->
+  <nav id="device-nav" role="navigation" aria-label="App navigation">
+    <a href="#/dashboard"  class="device-nav-item active" data-screen="dashboard"  id="dnav-dashboard">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="2" y="2" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/><rect x="11" y="2" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/><rect x="2" y="11" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/><rect x="11" y="11" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/></svg>
+      <span>Home</span>
+    </a>
+    <a href="#/inbox" class="device-nav-item" data-screen="inbox" id="dnav-inbox">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="2" y="4" width="16" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M2 7l8 5 8-5" stroke="currentColor" stroke-width="1.5"/></svg>
+      <span>Inbox</span>
+      <span class="device-nav-badge hidden" id="inbox-badge">0</span>
+    </a>
+    <a href="#/tasks" class="device-nav-item" data-screen="tasks" id="dnav-tasks">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3 5h14M3 10h10M3 15h7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      <span>Tasks</span>
+      <span class="device-nav-badge hidden" id="tasks-badge">0</span>
+    </a>
+    <a href="#/assistant" class="device-nav-item" data-screen="assistant" id="dnav-assistant">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="3" fill="currentColor"/><path d="M10 3v2M10 15v2M3 10h2M15 10h2M5.2 5.2l1.4 1.4M13.4 13.4l1.4 1.4M5.2 14.8l1.4-1.4M13.4 6.6l1.4-1.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      <span>ibal AI</span>
+    </a>
+    <a href="#/vision" class="device-nav-item" data-screen="vision" id="dnav-vision">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="4" stroke="currentColor" stroke-width="1.5"/><path d="M2 10c2-5 14-5 16 0-2 5-14 5-16 0z" stroke="currentColor" stroke-width="1.5"/></svg>
+      <span>Vision</span>
+    </a>
+  </nav>
+
+</div><!-- /#device-shell -->
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/device/router.js"></script>
+<script src="/device/app.js"></script>
+</body>
+</html>

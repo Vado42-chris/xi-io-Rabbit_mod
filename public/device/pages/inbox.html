@@ -1,0 +1,51 @@
+<div class="device-screen">
+  <div class="device-screen-header">
+    <h2>Inbox</h2>
+    <button class="button button-secondary" style="font-size:0.78rem;padding:6px 10px;" onclick="window.ibalDevice?.requestInbox()">Refresh</button>
+  </div>
+  <div id="inbox-proposals-section">
+    <p class="eyebrow">proposals</p>
+    <div id="inbox-proposal-list"><p class="muted">Loading proposals…</p></div>
+  </div>
+  <div id="inbox-events-section">
+    <p class="eyebrow" style="margin-top:8px;">recent events</p>
+    <div id="inbox-event-list"><p class="muted">Loading inbox…</p></div>
+  </div>
+</div>
+
+<script>
+(function() {
+  function renderProposals(proposals) {
+    const el = document.getElementById('inbox-proposal-list');
+    if (!el) return;
+    const pending = (proposals||[]).filter(p => p.status==='pending');
+    el.innerHTML = pending.length
+      ? pending.map(p => `<article class="proposal-card ${(p.confidence||0)>.8?'high-confidence':''}">
+          <div><p class="eyebrow">${p.source||'inbox'}</p><strong>${p.suggested_action||p.title||'Review required'}</strong></div>
+          <p class="muted">${p.summary||p.description||''}</p>
+          <p class="proposal-confidence">Confidence: ${p.confidence!=null?Math.round(p.confidence*100)+'%':'—'}</p>
+          <div class="proposal-actions">
+            <button class="button button-primary" data-action="approve-proposal" data-id="${p.id}">Approve</button>
+            <button class="button button-secondary" data-action="reject-proposal" data-id="${p.id}">Reject</button>
+          </div>
+        </article>`).join('')
+      : '<p class="muted">No pending proposals.</p>';
+  }
+
+  function renderEvents(inbox) {
+    const el = document.getElementById('inbox-event-list');
+    if (!el) return;
+    const events = (inbox||[]).slice(0,10);
+    el.innerHTML = events.length
+      ? events.map(e => `<article style="padding:10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--panel);margin-bottom:6px;">
+          <p class="eyebrow">${e.source||'email'} · ${e.timestamp?new Date(e.timestamp).toLocaleTimeString():''}</p>
+          <strong>${e.subject||e.title||'Inbox event'}</strong>
+          <p class="muted">${e.body||e.summary||''}</p>
+        </article>`).join('')
+      : '<p class="muted">Inbox empty.</p>';
+  }
+
+  window.addEventListener('ibal:inbox-updated', e => { renderProposals(e.detail?.proposals); renderEvents(e.detail?.inbox); });
+  renderProposals(window.ibalState?.proposals); renderEvents(window.ibalState?.inbox);
+})();
+</script>

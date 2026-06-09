@@ -1,0 +1,25 @@
+<div class="device-screen">
+  <div class="device-screen-header"><h2>Vision</h2><span class="pill pill-neutral">camera</span></div>
+  <div style="background:rgba(0,0,0,.4); border:1px solid var(--border); border-radius:var(--radius); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; min-height:240px; padding:24px;">
+    <svg width="48" height="48" viewBox="0 0 48 48" fill="none" style="color:var(--muted)"><circle cx="24" cy="26" r="9" stroke="currentColor" stroke-width="2"/><path d="M6 18h4l3-5h22l3 5h4a2 2 0 0 1 2 2v18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V20a2 2 0 0 1 2-2z" stroke="currentColor" stroke-width="2"/></svg>
+    <p class="muted" style="text-align:center;">Camera access required.<br>Vision scanning coming in the next phase.</p>
+    <button class="button button-secondary" id="request-camera-btn" type="button">Request Camera Access</button>
+    <div id="vision-feed" style="display:none; width:100%;"><video id="vision-video" autoplay playsinline style="width:100%; border-radius:8px;"></video></div>
+  </div>
+</div>
+
+<script>
+(function() {
+  document.getElementById('request-camera-btn')?.addEventListener('click', async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      const video = document.getElementById('vision-video');
+      const feed = document.getElementById('vision-feed');
+      if (video) { video.srcObject = stream; video.play(); }
+      if (feed) feed.style.display = 'block';
+    } catch (err) {
+      alert(`Camera access denied: ${err.message}`);
+    }
+  });
+})();
+</script>

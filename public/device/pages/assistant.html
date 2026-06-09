@@ -1,0 +1,68 @@
+<div class="device-screen">
+  <div class="device-screen-header"><h2>ibal AI</h2><span class="pill pill-neutral" id="assistant-model-label">—</span></div>
+
+  <div id="chat-messages-container" style="min-height:200px; display:flex; flex-direction:column; gap:8px; margin-bottom:8px;">
+    <div class="chat-bubble ai">Hello. I'm ibal. What would you like to work on?</div>
+  </div>
+
+  <div style="display:flex; gap:8px; align-items:flex-end;">
+    <textarea id="chat-input" placeholder="Type a message…" rows="2" style="flex:1; border-radius:8px; padding:10px; font-family:var(--font-sans); resize:none; background:var(--panel); border:1px solid var(--border); color:var(--text);"></textarea>
+    <button id="chat-send-btn" class="button button-primary" style="min-height:44px; padding:0 16px;">Send</button>
+  </div>
+
+  <div style="display:flex; justify-content:center; margin-top:16px;">
+    <button id="ptt-btn" class="ptt-btn" aria-label="Push to talk" title="Hold to speak">
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><path d="M14 4a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V8a4 4 0 0 1 4-4z" stroke="currentColor" stroke-width="2"/><path d="M6 14a8 8 0 0 0 16 0" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="14" y1="22" x2="14" y2="26" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+</div>
+
+<script>
+(function() {
+  const msgs = document.getElementById('chat-messages-container');
+  const input = document.getElementById('chat-input');
+  const sendBtn = document.getElementById('chat-send-btn');
+  const modelLabel = document.getElementById('assistant-model-label');
+  const pttBtn = document.getElementById('ptt-btn');
+
+  function addBubble(text, role) {
+    if (!msgs) return;
+    const el = document.createElement('div');
+    el.className = `chat-bubble ${role}`;
+    el.textContent = text;
+    msgs.appendChild(el);
+    msgs.scrollTop = msgs.scrollHeight;
+    return el;
+  }
+
+  let aiBubble = null;
+  window.addEventListener('ibal:chat-token', e => {
+    if (!aiBubble) aiBubble = addBubble('', 'ai');
+    if (aiBubble) aiBubble.textContent = e.detail.buffer;
+    msgs && (msgs.scrollTop = msgs.scrollHeight);
+  });
+  window.addEventListener('ibal:chat-complete', () => { aiBubble = null; if(sendBtn) sendBtn.disabled = false; });
+
+  function send() {
+    const text = input?.value.trim();
+    if (!text) return;
+    addBubble(text, 'user');
+    window.ibalDevice?.sendChatMessage(text);
+    if (input) input.value = '';
+    if (sendBtn) sendBtn.disabled = true;
+  }
+
+  sendBtn?.addEventListener('click', send);
+  input?.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
+
+  window.addEventListener('ibal:models-updated', e => { if (modelLabel && e.detail[0]) modelLabel.textContent = e.detail[0].name; });
+  if (window.ibalState?.models[0] && modelLabel) modelLabel.textContent = window.ibalState.models[0].name;
+
+  if (pttBtn) {
+    pttBtn.addEventListener('mousedown', () => pttBtn.classList.add('recording'));
+    pttBtn.addEventListener('mouseup', () => { pttBtn.classList.remove('recording'); });
+    pttBtn.addEventListener('touchstart', e => { e.preventDefault(); pttBtn.classList.add('recording'); });
+    pttBtn.addEventListener('touchend', () => pttBtn.classList.remove('recording'));
+  }
+})();
+</script>

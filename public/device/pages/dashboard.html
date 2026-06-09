@@ -1,0 +1,55 @@
+<div class="device-screen">
+  <div class="device-screen-header">
+    <h2>Home</h2>
+    <span class="pill pill-neutral" id="dashboard-time"></span>
+  </div>
+
+  <div class="status-grid" style="grid-template-columns: repeat(2, 1fr);">
+    <article class="metric-card" id="db-proposals-card" style="cursor:pointer;" onclick="window.location.hash='/inbox'">
+      <span class="metric-label">Pending Proposals</span>
+      <strong class="metric-value" id="db-proposals-count" style="color:var(--accent);">—</strong>
+    </article>
+    <article class="metric-card" id="db-tasks-card" style="cursor:pointer;" onclick="window.location.hash='/tasks'">
+      <span class="metric-label">Open Tasks</span>
+      <strong class="metric-value" id="db-tasks-count">—</strong>
+    </article>
+  </div>
+
+  <section class="panel" id="db-recent-proposals">
+    <p class="eyebrow">recent</p>
+    <h3>Proposals needing review</h3>
+    <div id="db-proposal-list"><p class="muted">Loading…</p></div>
+  </section>
+</div>
+
+<script>
+(function() {
+  const clock = document.getElementById('dashboard-time');
+  if (clock) { const tick = () => { clock.textContent = new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); }; tick(); setInterval(tick, 10000); }
+
+  function render(data) {
+    const proposals = (data?.proposals || []).filter(p => p.status === 'pending');
+    const tasks = window.ibalState?.tasks || [];
+    const dc = document.getElementById('db-proposals-count');
+    const tc = document.getElementById('db-tasks-count');
+    if (dc) dc.textContent = proposals.length;
+    if (tc) tc.textContent = tasks.filter(t => t.status !== 'done').length;
+    const list = document.getElementById('db-proposal-list');
+    if (list) {
+      list.innerHTML = proposals.slice(0,3).map(p => `
+        <article class="proposal-card ${(p.confidence||0)>0.8?'high-confidence':''}">
+          <div><p class="eyebrow">${p.source||'inbox'} · ${(p.confidence?Math.round(p.confidence*100)+'% confidence':'')}</p><strong>${p.suggested_action||p.title||'Action required'}</strong></div>
+          <p class="muted">${p.summary||''}</p>
+          <div class="proposal-actions">
+            <button class="button button-primary" data-action="approve-proposal" data-id="${p.id}">Approve</button>
+            <button class="button button-secondary" data-action="reject-proposal" data-id="${p.id}">Reject</button>
+          </div>
+        </article>`).join('') || '<p class="muted">No pending proposals.</p>';
+    }
+  }
+
+  window.addEventListener('ibal:inbox-updated', e => render(e.detail));
+  window.addEventListener('ibal:tasks-updated', () => render({ proposals: window.ibalState?.proposals }));
+  render({ proposals: window.ibalState?.proposals || [] });
+})();
+</script>
