@@ -66,8 +66,6 @@ export function init() {
         if (cardData.status === 'active') {
           badge.className = 'pill pill-success';
           badge.textContent = 'Connected';
-          badge.style.background = 'rgba(111,214,173,.14)';
-          badge.style.color = 'var(--ok, #6fd6ad)';
           
           if (prefix === 'workspace') desc.textContent = 'Mapped volume for ROMs, assets, and active builds.';
           else if (prefix === 'cloud') desc.textContent = 'Directory exists and is writable.';
@@ -75,14 +73,10 @@ export function init() {
         } else if (cardData.status === 'permission_denied') {
           badge.className = 'pill pill-offline';
           badge.textContent = 'Permission Denied';
-          badge.style.background = 'rgba(219,114,114,0.14)';
-          badge.style.color = 'var(--danger, #db7272)';
           desc.textContent = cardData.message || 'Write permissions not granted.';
         } else {
           badge.className = 'pill pill-warning';
           badge.textContent = 'Unavailable';
-          badge.style.background = 'rgba(217,177,93,0.14)';
-          badge.style.color = 'var(--warn, #d9b15d)';
           desc.textContent = cardData.message || 'Directory missing or offline.';
         }
       };
@@ -102,14 +96,14 @@ export function init() {
   // Load directories in the picker modal
   async function loadPickerDirectory(dirPath) {
     try {
-      pickerDirList.innerHTML = '<div style="padding: 12px; color: var(--muted); text-align: center; font-size: 0.82rem;">Loading...</div>';
+      pickerDirList.innerHTML = '<div class="picker-status-msg muted">Loading...</div>';
       selectedPickerDir = null;
       
       const res = await fetch(`/api/fs/list?path=${encodeURIComponent(dirPath)}`);
       const data = await res.json();
       
       if (!data.success) {
-        pickerDirList.innerHTML = `<div style="padding: 12px; color: var(--danger); text-align: center; font-size: 0.82rem;">Error: ${data.error || 'Failed to list directory'}</div>`;
+        pickerDirList.innerHTML = `<div class="picker-status-msg danger">Error: ${data.error || 'Failed to list directory'}</div>`;
         return;
       }
 
@@ -120,23 +114,26 @@ export function init() {
       // Toggle parent button state
       if (pickerParentPath && pickerParentPath !== currentPickerPath) {
         btnPickerUp.disabled = false;
-        btnPickerUp.style.opacity = '1';
       } else {
         btnPickerUp.disabled = true;
-        btnPickerUp.style.opacity = '0.5';
       }
 
       pickerDirList.innerHTML = '';
       
       if (!data.directories || data.directories.length === 0) {
-        pickerDirList.innerHTML = '<div style="padding: 12px; color: var(--muted); text-align: center; font-size: 0.82rem;">No subdirectories found.</div>';
+        pickerDirList.innerHTML = '<div class="picker-status-msg muted">No subdirectories found.</div>';
         return;
       }
 
       data.directories.forEach(name => {
         const item = document.createElement('div');
         item.className = 'picker-dir-item';
-        item.innerHTML = `<span>📁</span><span style="font-family: var(--font-sans);">${name}</span>`;
+        item.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="dir-item-icon">
+            <path d="M1.5 2.5v11a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-6l-2-2h-3a1 1 0 0 0-1 1z" />
+          </svg>
+          <span>${name}</span>
+        `;
         
         item.addEventListener('click', () => {
           pickerDirList.querySelectorAll('.picker-dir-item').forEach(el => el.classList.remove('selected'));
@@ -152,7 +149,7 @@ export function init() {
         pickerDirList.appendChild(item);
       });
     } catch (err) {
-      pickerDirList.innerHTML = `<div style="padding: 12px; color: var(--danger); text-align: center; font-size: 0.82rem;">Error: ${err.message}</div>`;
+      pickerDirList.innerHTML = `<div class="picker-status-msg danger">Error: ${err.message}</div>`;
     }
   }
 
@@ -222,46 +219,43 @@ export function init() {
     ingressCandidatesBody.innerHTML = '';
     
     if (currentCandidates.length === 0) {
-      ingressQueuePanel.style.display = 'block';
+      ingressQueuePanel.classList.remove('hidden');
       ingressCandidatesBody.innerHTML = `
         <tr>
-          <td colspan="4" style="padding: 16px; text-align: center; color: var(--muted);">No eligible ingress components found in selected root.</td>
+          <td colspan="4" class="picker-status-msg muted">No eligible ingress components found in selected root.</td>
         </tr>
       `;
       queueStatusText.textContent = 'Scan complete: 0 items detected.';
       btnVerifyReadiness.disabled = true;
       btnCommitIngress.disabled = true;
+      ingressStatusPill.className = 'pill pill-neutral';
       ingressStatusPill.textContent = 'empty target';
-      ingressStatusPill.style.background = 'rgba(255,255,255,0.06)';
-      ingressStatusPill.style.color = 'var(--muted)';
       return;
     }
 
-    ingressQueuePanel.style.display = 'block';
+    ingressQueuePanel.classList.remove('hidden');
     btnVerifyReadiness.disabled = false;
     btnCommitIngress.disabled = true;
+    ingressStatusPill.className = 'pill pill-warning';
     ingressStatusPill.textContent = 'verification pending';
-    ingressStatusPill.style.background = 'rgba(217,177,93,0.14)';
-    ingressStatusPill.style.color = 'var(--warn)';
 
     currentCandidates.forEach(cand => {
       const tr = document.createElement('tr');
-      tr.style.borderBottom = '1px solid var(--border)';
       
       let eligibilityPill = '';
       if (cand.status === 'eligible') {
-        eligibilityPill = `<span class="pill pill-success" style="font-size:0.65rem; padding: 1px 6px; background: rgba(111,214,173,.14); color: var(--ok);">Eligible</span>`;
+        eligibilityPill = `<span class="pill pill-success" data-tooltip="Standard format verified. Ready for commit.">Eligible</span>`;
       } else if (cand.status === 'committed') {
-        eligibilityPill = `<span class="pill" style="font-size:0.65rem; padding: 1px 6px; background: rgba(111,214,173,.14); color: var(--ok);">Committed</span>`;
+        eligibilityPill = `<span class="pill pill-success" data-tooltip="Already indexed in repository ledger.">Committed</span>`;
       } else {
-        eligibilityPill = `<span class="pill pill-warning" style="font-size:0.65rem; padding: 1px 6px; background: rgba(217,177,93,0.14); color: var(--warn);">Degraded</span>`;
+        eligibilityPill = `<span class="pill pill-warning" data-tooltip="Ineligible or normalization failed.">Degraded</span>`;
       }
 
       tr.innerHTML = `
-        <td style="padding: 10px 12px; font-weight: 600;">${cand.title}</td>
-        <td style="padding: 10px 12px; font-family: var(--font-mono); color: var(--muted);">${cand.system}</td>
-        <td style="padding: 10px 12px; font-family: var(--font-mono); color: var(--muted);">${cand.path}</td>
-        <td style="padding: 10px 12px; text-align: right;">${eligibilityPill}</td>
+        <td class="cand-title">${cand.title}</td>
+        <td class="cand-system">${cand.system}</td>
+        <td class="cand-path">${cand.path}</td>
+        <td class="cand-eligibility">${eligibilityPill}</td>
       `;
       ingressCandidatesBody.appendChild(tr);
     });
@@ -273,17 +267,40 @@ export function init() {
   }
 
   // Verification
-  const onVerifyClick = () => {
+  const onVerifyClick = async () => {
+    const targetPath = ingressPathInput.value.trim();
     appendTelemetry(`[ingress] Running EventAtom normalization checks on ${currentCandidates.length} items...`);
     btnVerifyReadiness.disabled = true;
-    
-    setTimeout(() => {
-      appendTelemetry(`[ingress] Verification success: Metadata and ledger alignment verified.`, 'var(--ok)');
-      btnCommitIngress.disabled = false;
-      ingressStatusPill.textContent = 'verified: ready';
-      ingressStatusPill.style.background = 'rgba(111,214,173,.14)';
-      ingressStatusPill.style.color = 'var(--ok)';
-    }, 800);
+    btnVerifyReadiness.textContent = 'Verifying...';
+
+    try {
+      const res = await fetch('/api/storage/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: targetPath })
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        appendTelemetry(`[ingress] Verification success: ${data.message || 'Metadata and ledger alignment verified.'}`, 'var(--ok)');
+        btnCommitIngress.disabled = false;
+        ingressStatusPill.className = 'pill pill-success';
+        ingressStatusPill.textContent = 'verified: ready';
+      } else {
+        appendTelemetry(`[ingress] Verification failed: ${data.message || data.error || 'Path invalid.'}`, 'var(--danger)');
+        btnCommitIngress.disabled = true;
+        ingressStatusPill.className = 'pill pill-offline';
+        ingressStatusPill.textContent = 'verification failed';
+      }
+    } catch (err) {
+      appendTelemetry(`[ingress] Verification error: ${err.message}`, 'var(--danger)');
+      btnCommitIngress.disabled = true;
+      ingressStatusPill.className = 'pill pill-offline';
+      ingressStatusPill.textContent = 'verification error';
+    } finally {
+      btnVerifyReadiness.disabled = false;
+      btnVerifyReadiness.textContent = 'Verify Backup Readiness';
+    }
   };
 
   // Commit Ingress
@@ -299,14 +316,13 @@ export function init() {
 
     btnCommitIngress.disabled = true;
     btnVerifyReadiness.disabled = true;
+    ingressStatusPill.className = 'pill pill-success';
     ingressStatusPill.textContent = 'committed';
-    ingressStatusPill.style.background = 'rgba(111,214,173,.14)';
-    ingressStatusPill.style.color = 'var(--ok)';
 
     ingressCandidatesBody.querySelectorAll('tr').forEach(tr => {
       const lastTd = tr.querySelector('td:last-child');
       if (lastTd) {
-        lastTd.innerHTML = `<span class="pill" style="font-size:0.65rem; padding: 1px 6px; background: rgba(111,214,173,.14); color: var(--ok);">Committed</span>`;
+        lastTd.innerHTML = `<span class="pill pill-success" data-tooltip="Committed to repository ledger.">Committed</span>`;
       }
     });
 

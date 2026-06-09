@@ -88,10 +88,19 @@ if (selfHealBtn) {
 
 socket.on('self-heal-status', (data) => {
   if (healMsg) healMsg.textContent = data.message || 'Recovery attempt complete.';
-  if (data.success) {
-    setTimeout(() => { modal?.classList.add('hidden'); if (selfHealBtn) selfHealBtn.disabled = false; healProgress?.classList.add('hidden'); }, 1500);
-  } else {
+  const isFinished = data.status === 'success' || data.status === 'failed' || data.success !== undefined;
+  const isSuccess = data.status === 'success' || data.success === true;
+
+  if (isFinished) {
     if (selfHealBtn) selfHealBtn.disabled = false;
+    if (isSuccess) {
+      setTimeout(() => {
+        modal?.classList.add('hidden');
+        healProgress?.classList.add('hidden');
+      }, 1500);
+    }
+  } else {
+    if (selfHealBtn) selfHealBtn.disabled = true;
   }
 });
 
@@ -99,9 +108,11 @@ socket.on('diagnostic-event', (data) => {
   if (data?.severity === 'fatal' || data?.code === 'OLLAMA_OFFLINE') showDiagModal(data);
 });
 
-// Allow the ollama status card (if present) to open the modal
+// Allow the ollama status card (if present) to navigate to the diagnostics page
 document.addEventListener('click', (e) => {
-  if (e.target.closest('#ollama-status-card')) showDiagModal({});
+  if (e.target.closest('#ollama-status-card')) {
+    window.location.hash = '/diagnostics';
+  }
 });
 
 /* ── NAVIGATION REACTIONS ─────────────────────────────────────────────────────── */

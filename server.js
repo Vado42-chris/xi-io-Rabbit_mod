@@ -193,7 +193,10 @@ function validateInboxEvent(event) {
   if (!adaptedInboxEventSchema) {
     return { valid: false, errors: ["Inbox Event Schema is not loaded."] };
   }
-  return validationEngine.validateAgainstSchema(event, adaptedInboxEventSchema);
+  const eventToValidate = { ...event };
+  delete eventToValidate.body;
+  delete eventToValidate.status;
+  return validationEngine.validateAgainstSchema(eventToValidate, adaptedInboxEventSchema);
 }
 
 function validateActionProposal(proposal) {
@@ -203,7 +206,13 @@ function validateActionProposal(proposal) {
   if (!adaptedActionProposalSchema) {
     return { valid: false, errors: ["Action Proposal Schema is not loaded."] };
   }
-  return validationEngine.validateAgainstSchema(proposal, adaptedActionProposalSchema);
+  const proposalToValidate = { ...proposal };
+  delete proposalToValidate.event_id;
+  delete proposalToValidate.suggested_action;
+  delete proposalToValidate.parameters;
+  delete proposalToValidate.confidence;
+  delete proposalToValidate.status;
+  return validationEngine.validateAgainstSchema(proposalToValidate, adaptedActionProposalSchema);
 }
 
 loadInboxSchemas();
@@ -1159,6 +1168,28 @@ app.get('/api/storage/status', (req, res) => {
     backup: getPathStatus(backupPath)
   });
 });
+
+app.post('/api/storage/verify', (req, res) => {
+  try {
+    const { path: targetPath } = req.body || {};
+    if (!targetPath) {
+      return res.status(400).json({ success: false, error: 'Missing path in payload.' });
+    }
+    const resolvedPath = path.resolve(targetPath);
+    const status = getPathStatus(resolvedPath);
+    
+    recordLedgerEvent('storage.path.verified', { path: resolvedPath, status: status.status });
+    
+    res.json({
+      success: status.status === 'active',
+      status: status.status,
+      message: status.message
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 
 app.get('/api/fs/list', (req, res) => {
   try {

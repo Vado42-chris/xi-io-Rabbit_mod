@@ -13,7 +13,7 @@ export function init() {
     const models = data?.models || [];
     if (ollamaStatus) {
       ollamaStatus.textContent = models.length > 0 ? 'Online' : 'Offline';
-      ollamaStatus.style.color = models.length > 0 ? 'var(--ok)' : 'var(--danger)';
+      ollamaStatus.className = 'metric-value ' + (models.length > 0 ? 'text-ok' : 'text-danger');
     }
     if (modelCount) modelCount.textContent = models.length;
     if (modelActive && models[0]) modelActive.textContent = models[0].name || '—';

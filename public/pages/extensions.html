@@ -10,7 +10,7 @@
     </div>
   </header>
 
-  <div id="extensions-status-banner" class="status-banner" style="display:none;">
+  <div id="extensions-status-banner" class="status-banner hidden">
     <p class="muted" id="extensions-status-text">Checking extension health…</p>
   </div>
 
@@ -22,15 +22,15 @@
     </article>
     <article class="metric-card">
       <span class="metric-label">Connected</span>
-      <strong class="metric-value" id="ext-count-connected" style="color: var(--ok);">—</strong>
+      <strong class="metric-value text-ok" id="ext-count-connected">—</strong>
     </article>
     <article class="metric-card">
       <span class="metric-label">Offline</span>
-      <strong class="metric-value" id="ext-count-offline" style="color: var(--danger);">—</strong>
+      <strong class="metric-value text-danger" id="ext-count-offline">—</strong>
     </article>
     <article class="metric-card">
       <span class="metric-label">Runtime Level</span>
-      <strong class="metric-value" style="color: var(--accent);">L2</strong>
+      <strong class="metric-value text-accent">L2</strong>
     </article>
   </div>
 
@@ -49,4 +49,3 @@
     </div>
   </section>
 </div>
-

@@ -30,20 +30,39 @@
   </div>
 
   <section class="panel">
-    <div class="panel-header"><div><p class="eyebrow">live</p><h3>System Event Log</h3></div></div>
-    <div id="diag-log" style="max-height:320px; overflow-y:auto; background:rgba(0,0,0,.18); border:1px solid var(--border); border-radius:var(--radius); padding:12px; font-family:var(--font-mono,monospace); font-size:0.85rem; color:var(--muted); display:grid; gap:4px;">
+    <div class="panel-header">
+      <div>
+        <p class="eyebrow">live</p>
+        <h3>System Event Log</h3>
+      </div>
+      <div class="panel-header-controls">
+        <select id="log-level-filter" class="select-filter" aria-label="Filter log level">
+          <option value="all">All Levels</option>
+          <option value="info">Info & Above</option>
+          <option value="warn">Warnings & Above</option>
+          <option value="error">Errors & Above</option>
+          <option value="fatal">Fatal Only</option>
+        </select>
+        <button id="btn-clear-diag-log" class="diagnostics-log-clear-btn" type="button">Clear Log</button>
+      </div>
+    </div>
+    <div id="diag-log" class="diagnostics-log">
       <span>Waiting for system events…</span>
     </div>
   </section>
 
   <section class="panel">
-    <div class="panel-header"><div><p class="eyebrow">recovery</p><h3>Self-Healing Controls</h3></div></div>
+    <div class="panel-header">
+      <div>
+        <p class="eyebrow">recovery</p>
+        <h3>Self-Healing Controls</h3>
+      </div>
+    </div>
     <p class="muted">Trigger manual service recovery. The self-healing engine attempts to restart Ollama and verify connectivity.</p>
-    <div id="diag-heal-status" style="margin-top:8px; color:var(--muted); font-size:0.88rem;"></div>
-    <div class="pill-row" style="margin-top:12px;">
+    <div id="diag-heal-status" class="diagnostics-heal-status"></div>
+    <div class="pill-row spaced-top-12">
       <button class="button button-primary" id="diag-heal-ollama-btn" type="button">Restart Ollama</button>
       <button class="button button-secondary" id="diag-simulate-ingress-btn" type="button">Simulate Ingress</button>
     </div>
   </section>
 </div>
-
