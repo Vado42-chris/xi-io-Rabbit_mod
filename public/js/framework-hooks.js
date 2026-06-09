@@ -19,8 +19,6 @@
  * Usage: import { outboundQueue, inboundQueue, manifestSync } from './framework-hooks.js';
  */
 
-'use strict';
-
 /* ── SENTINEL CONSTANTS ──────────────────────────────────────────────────────── */
 const HookStatus = Object.freeze({
   NOT_CONFIGURED:  'NOT_CONFIGURED',

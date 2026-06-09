@@ -174,8 +174,9 @@ body {
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 9px 12px;
+  gap: calc(10px * var(--ui-scale, 1.25));
+  padding: calc(9px * var(--ui-scale, 1.25)) calc(12px * var(--ui-scale, 1.25));
+  min-height: max(44px, calc(36px * var(--ui-scale, 1.25)));
   border-radius: var(--radius, 12px);
   border: 1px solid transparent;
   color: var(--muted);
@@ -1054,40 +1055,31 @@ body {
 
 /* ── ACCESSIBILITY & COMFORT SCALING ADJUSTMENTS ────────────────────────────── */
 
-/* Ensure minimum button/control sizes (44px target) and scalable text/paddings */
-.btn, .button, button, .icon-btn, select, input {
-  min-height: max(44px, calc(34px * var(--ui-scale)));
+/* D1: Minimum touch-target sizes via semantic class selectors only (44px WCAG 2.5.5) */
+.btn, .btn-primary, .btn-secondary, .select-field, .input-field, .icon-btn {
+  min-height: max(44px, calc(34px * var(--ui-scale, 1.25)));
   box-sizing: border-box;
 }
 
-/* Sidebar nav-item padding, label alignment & hover */
-.nav-item {
-  padding: calc(10px * var(--ui-scale)) calc(14px * var(--ui-scale)) !important;
-  gap: calc(10px * var(--ui-scale)) !important;
-  min-height: max(44px, calc(36px * var(--ui-scale)));
-}
-
-/* Table text accessibility, padding and row comfort height */
+/* Table row comfort — line-height only, no padding override needed (table uses own vars) */
 .ingress-queue-table {
   line-height: 1.5;
 }
 .ingress-queue-table th,
 .ingress-queue-table td {
-  padding: calc(12px * var(--ui-scale)) calc(16px * var(--ui-scale)) !important;
+  padding: calc(10px * var(--ui-scale, 1.25)) calc(12px * var(--ui-scale, 1.25));
 }
 
-/* Card and Panel padding scaling */
-.panel, .status-card, .metric-card, .diagnostic-card {
-  padding: calc(16px * var(--ui-scale)) !important;
-}
+/* Card/panel padding scaling — lower specificity; no !important */
+.panel { padding: calc(16px * var(--ui-scale, 1.25)) calc(20px * var(--ui-scale, 1.25)); }
 
-/* Badge/pill minimum readability sizes */
-.badge, .pill, .nav-badge, .level-badge, .health-pill {
-  font-size: 0.75rem !important; /* calc(0.75 * 16px * 1.25) = 15px minimum equivalent */
-}
+/* Badge/pill minimum readability — 0.75rem floor at any scale level */
+:root .nav-badge, :root .level-badge, :root .health-pill { font-size: 0.75rem; }
 
-/* Standard focus ring for visibility */
-.btn:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible {
+/* Universal focus ring — keyboard navigability at all scale levels */
+.btn:focus-visible, .icon-btn:focus-visible,
+.select-field:focus-visible, .input-field:focus-visible,
+a:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
