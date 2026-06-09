@@ -347,3 +347,142 @@ html, body {
   body { font-size: 17px; }
   .nav-item { padding: 12px 16px; font-size: 1rem; }
 }
+
+/* ── ROSETTA LEXICON CONFIGURATION PANEL ─────────────────────────────────────── */
+.form-grid {
+  display: grid;
+  gap: 16px;
+  margin-top: 12px;
+}
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.form-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.select-field, .input-field {
+  background: var(--panel, #0f1416);
+  border: 1px solid var(--border, #202b30);
+  color: var(--text, #d0d7de);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.select-field:focus, .input-field:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+  outline: none;
+}
+.select-field:disabled, .input-field:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.section-subtitle {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 4px;
+}
+.mapping-inputs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+  margin-top: 8px;
+}
+.mapping-row {
+  display: flex;
+  gap: 12px;
+  background: rgba(0, 0, 0, 0.15);
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.03);
+}
+.mapping-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.mapping-label {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.custom-mappings-container {
+  display: grid;
+  gap: 12px;
+  animation: fadeIn 0.2s ease-out;
+}
+.custom-mappings-container.hidden {
+  display: none;
+}
+.taxonomy-preview-container {
+  margin-top: 12px;
+}
+.lexicon-chain-preview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 87, 34, 0.03);
+  border: 1px dashed rgba(255, 87, 34, 0.25);
+  border-radius: 8px;
+  padding: 12px;
+  min-height: 48px;
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+}
+.preview-node {
+  background: rgba(255, 87, 34, 0.08);
+  border: 1px solid rgba(255, 87, 34, 0.2);
+  color: var(--text);
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-weight: 600;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.preview-node .node-type {
+  font-size: 0.65rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  font-weight: 400;
+}
+.preview-node .node-value {
+  color: var(--accent);
+}
+.preview-arrow {
+  color: var(--muted);
+  font-weight: bold;
+}
+.form-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+.status-msg {
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: opacity 0.15s;
+}
+.status-msg.success {
+  color: var(--ok, #6fd6ad);
+}
+.status-msg.error {
+  color: var(--danger, #db7272);
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}

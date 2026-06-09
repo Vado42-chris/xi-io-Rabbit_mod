@@ -18,4 +18,103 @@
       <div><span class="detail-label">Ledger</span><code>data/events.jsonl</code></div>
     </div>
   </section>
+  <section class="panel">
+    <div class="panel-header">
+      <div>
+        <p class="eyebrow">nomenclature settings</p>
+        <h3>Rosetta Stone Lexicon</h3>
+      </div>
+    </div>
+    
+    <form id="lexicon-settings-form" class="form-grid">
+      <div class="form-group">
+        <label for="lexicon-profile" class="form-label">Active Profile</label>
+        <select id="lexicon-profile" class="select-field">
+          <option value="developer">Developer (workspace, extension, connection, diagnostic, task)</option>
+          <option value="docket">Docket (docket, app, integration, health-check, item)</option>
+          <option value="legal">Legal (case, resource, exhibit, verification, action-item)</option>
+          <option value="custom">Custom (define your own taxonomy)</option>
+        </select>
+      </div>
+
+      <div id="custom-lexicon-mappings" class="custom-mappings-container hidden">
+        <p class="section-subtitle">Define Custom Taxonomy Singular & Plural Forms</p>
+        <div class="mapping-inputs-grid">
+          <div class="mapping-row">
+            <div class="mapping-col">
+              <label for="map-workspace" class="mapping-label">Workspace (singular)</label>
+              <input type="text" id="map-workspace" class="input-field" placeholder="e.g. workspace">
+            </div>
+            <div class="mapping-col">
+              <label for="map-workspaces" class="mapping-label">Workspace (plural)</label>
+              <input type="text" id="map-workspaces" class="input-field" placeholder="e.g. workspaces">
+            </div>
+          </div>
+          <div class="mapping-row">
+            <div class="mapping-col">
+              <label for="map-extension" class="mapping-label">Extension (singular)</label>
+              <input type="text" id="map-extension" class="input-field" placeholder="e.g. extension">
+            </div>
+            <div class="mapping-col">
+              <label for="map-extensions" class="mapping-label">Extension (plural)</label>
+              <input type="text" id="map-extensions" class="input-field" placeholder="e.g. extensions">
+            </div>
+          </div>
+          <div class="mapping-row">
+            <div class="mapping-col">
+              <label for="map-connection" class="mapping-label">Connection (singular)</label>
+              <input type="text" id="map-connection" class="input-field" placeholder="e.g. connection">
+            </div>
+            <div class="mapping-col">
+              <label for="map-connections" class="mapping-label">Connection (plural)</label>
+              <input type="text" id="map-connections" class="input-field" placeholder="e.g. connections">
+            </div>
+          </div>
+          <div class="mapping-row">
+            <div class="mapping-col">
+              <label for="map-diagnostic" class="mapping-label">Diagnostic (singular)</label>
+              <input type="text" id="map-diagnostic" class="input-field" placeholder="e.g. diagnostic">
+            </div>
+            <div class="mapping-col">
+              <label for="map-diagnostics" class="mapping-label">Diagnostic (plural)</label>
+              <input type="text" id="map-diagnostics" class="input-field" placeholder="e.g. diagnostics">
+            </div>
+          </div>
+          <div class="mapping-row">
+            <div class="mapping-col">
+              <label for="map-task" class="mapping-label">Task (singular)</label>
+              <input type="text" id="map-task" class="input-field" placeholder="e.g. task">
+            </div>
+            <div class="mapping-col">
+              <label for="map-tasks" class="mapping-label">Task (plural)</label>
+              <input type="text" id="map-tasks" class="input-field" placeholder="e.g. tasks">
+            </div>
+          </div>
+          <div class="mapping-row">
+            <div class="mapping-col">
+              <label for="map-group" class="mapping-label">Group (singular)</label>
+              <input type="text" id="map-group" class="input-field" placeholder="e.g. group">
+            </div>
+            <div class="mapping-col">
+              <label for="map-subgroup" class="mapping-label">Subgroup (singular)</label>
+              <input type="text" id="map-subgroup" class="input-field" placeholder="e.g. subgroup">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chain Hierarchy Preview Component -->
+      <div class="taxonomy-preview-container">
+        <p class="section-subtitle">Taxonomy Chain Hierarchy Preview</p>
+        <div id="lexicon-chain-preview" class="lexicon-chain-preview">
+          <!-- Dynamically populated via account.js -->
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" id="save-lexicon-btn" class="btn btn-primary">Save Lexicon Settings</button>
+        <span id="lexicon-status-message" class="status-msg"></span>
+      </div>
+    </form>
+  </section>
 </div>

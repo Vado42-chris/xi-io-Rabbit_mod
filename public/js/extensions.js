@@ -22,26 +22,35 @@ export function init() {
     if (countConn) countConn.textContent = connected;
     if (countOff)  countOff.textContent  = offline;
 
-    grid.innerHTML = extensions.map(ext => `
-      <article class="project-card">
-        <header class="project-card-header">
-          <div>
-            <p class="project-purpose">${ext.purpose || ext.maturityState || 'app'}</p>
-            <h4 class="project-name">${ext.displayName || ext.id}</h4>
+    grid.innerHTML = extensions.map(ext => {
+      const transPurpose = typeof window.t === 'function' 
+        ? window.t('extension', ext.purpose || ext.maturityState || 'extension')
+        : (ext.purpose || ext.maturityState || 'extension');
+      return `
+        <article class="project-card">
+          <header class="project-card-header">
+            <div>
+              <p class="project-purpose">${transPurpose}</p>
+              <h4 class="project-name">${ext.displayName || ext.id}</h4>
+            </div>
+            <span class="${statusPill(ext.status)}">${ext.status || 'unknown'}</span>
+          </header>
+          <p class="project-summary">${ext.description || ''}</p>
+          <div class="pill-row">
+            ${ext.currentRoute ? `<span class="pill pill-neutral">${ext.currentRoute}</span>` : ''}
+            ${ext.maturityState ? `<span class="pill pill-neutral">${ext.maturityState}</span>` : ''}
           </div>
-          <span class="${statusPill(ext.status)}">${ext.status || 'unknown'}</span>
-        </header>
-        <p class="project-summary">${ext.description || ''}</p>
-        <div class="pill-row">
-          ${ext.currentRoute ? `<span class="pill pill-neutral">${ext.currentRoute}</span>` : ''}
-          ${ext.maturityState ? `<span class="pill pill-neutral">${ext.maturityState}</span>` : ''}
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          ${ext.currentRoute && ext.status === 'connected' ? `<button class="button button-primary" type="button" onclick="window.ibalPreview?.setUrl('${ext.currentRoute}')">Preview</button>` : ''}
-          ${ext.currentRoute ? `<a class="button button-secondary" href="${ext.currentRoute}" target="_blank" rel="noopener">Open ↗</a>` : ''}
-        </div>
-      </article>
-    `).join('');
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            ${ext.currentRoute && ext.status === 'connected' ? `<button class="button button-primary" type="button" onclick="window.ibalPreview?.setUrl('${ext.currentRoute}')">Preview</button>` : ''}
+            ${ext.currentRoute ? `<a class="button button-secondary" href="${ext.currentRoute}" target="_blank" rel="noopener">Open ↗</a>` : ''}
+          </div>
+        </article>
+      `;
+    }).join('');
+
+    if (typeof window.translateDOM === 'function') {
+      window.translateDOM(grid);
+    }
   }
 
   function handleExtensionsUpdated(e) {

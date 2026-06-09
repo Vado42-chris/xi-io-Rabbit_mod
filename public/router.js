@@ -18,8 +18,10 @@ const DEFAULT_ROUTE = 'extensions';
 // Page module registry — JS modules are dynamically imported after HTML loads
 const PAGE_MODULES = {
   'extensions':   'js/extensions.js',
+  'connections':  'js/connections.js',
   'model-config': 'js/model-config.js',
   'diagnostics':  'js/diagnostics.js',
+  'account':      'js/account.js',
 };
 
 let currentRoute = null;
@@ -56,6 +58,9 @@ async function navigate(routeKey) {
     const res = await fetch(route.file, { cache: 'no-store' });
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     contentArea.innerHTML = await res.text();
+    if (typeof window.translateDOM === 'function') {
+      window.translateDOM(contentArea);
+    }
   } catch (err) {
     contentArea.innerHTML = `
       <div class="page-shell">
@@ -107,7 +112,12 @@ document.addEventListener('click', (e) => {
 window.addEventListener('hashchange', handleRouteChange);
 
 // Initial load
-document.addEventListener('DOMContentLoaded', handleRouteChange);
+document.addEventListener('DOMContentLoaded', async () => {
+  if (window.lexicon && typeof window.lexicon.init === 'function') {
+    await window.lexicon.init();
+  }
+  handleRouteChange();
+});
 
 // Expose for other scripts
 window.ibalRouter = { navigate, getRouteFromHash };

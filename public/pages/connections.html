@@ -1,39 +1,133 @@
 <div class="page-shell">
-  <header class="topbar">
+  <header class="topbar" style="border-bottom: none; padding: 0; margin-bottom: 8px;">
     <div>
       <p class="eyebrow">integrations</p>
-      <h2>Connections</h2>
-      <p class="muted">External service integrations for ingress, automation, and data routing.</p>
+      <h2 data-t="connections">Connections</h2>
+      <p class="muted">Manage local storage, data routing, ingress sources, and workspace configurations.</p>
     </div>
   </header>
+
+  <!-- Section 1: Ecosystem Local Storage Roots -->
   <section class="panel">
     <div class="panel-header">
-      <div><p class="eyebrow">ingress</p><h3>xi-io: Inbox</h3></div>
-      <span class="pill pill-warning">planned</span>
+      <div>
+        <p class="eyebrow">storage system</p>
+        <h3>Ecosystem Local Storage Roots</h3>
+      </div>
+      <span class="pill pill-success" style="background: rgba(111,214,173,.14); color: var(--ok, #6fd6ad);">active</span>
     </div>
-    <p class="muted">Email ingress engine. Normalises messages into InboxEvent atoms and routes proposals to the AI queue.</p>
-    <div class="pill-row" style="margin-top:8px;">
-      <span class="pill pill-neutral">IMAP / SMTP</span>
-      <span class="pill pill-neutral">EventAtom schema</span>
-      <span class="pill pill-neutral">xi-io-inbox</span>
+    <p class="muted">Configured root pathways mapped for assets, media, system backups, and synchronized local storage targets.</p>
+    
+    <div class="status-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-top: 16px;">
+      <!-- Card 1: Primary Workspace -->
+      <div class="storage-card" style="background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+          <h4 style="margin: 0; font-size: 0.9rem; font-weight: 700;">Primary <span data-t="workspace">Workspace</span></h4>
+          <span class="pill pill-success" style="font-size: 0.65rem; padding: 1px 6px; background: rgba(111,214,173,.14); color: var(--ok, #6fd6ad);">Connected</span>
+        </div>
+        <p style="margin: 0; font-size: 0.78rem; font-family: var(--font-mono); color: var(--muted); word-break: break-all;">/media/chrishallberg/Storage 22/999_Work/003_Projects/</p>
+        <span style="font-size: 0.72rem; color: var(--muted);">Mapped volume for ROMs, assets, and active builds.</span>
+      </div>
+
+      <!-- Card 2: Cloud Sync Cache -->
+      <div class="storage-card" style="background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+          <h4 style="margin: 0; font-size: 0.9rem; font-weight: 700;">Cloud Sync Cache</h4>
+          <span class="pill pill-warning" style="font-size: 0.65rem; padding: 1px 6px; background: rgba(217,177,93,0.14); color: var(--warn, #d9b15d);">Unavailable</span>
+        </div>
+        <p style="margin: 0; font-size: 0.78rem; font-family: var(--font-mono); color: var(--muted); word-break: break-all;">/home/chrishallberg/cloud_cache/</p>
+        <span style="font-size: 0.72rem; color: var(--muted);">Directory missing or write permissions not granted.</span>
+      </div>
+
+      <!-- Card 3: Backup Destination -->
+      <div class="storage-card" style="background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+          <h4 style="margin: 0; font-size: 0.9rem; font-weight: 700;">Backup Destination (NAS)</h4>
+          <span class="pill pill-offline" style="font-size: 0.65rem; padding: 1px 6px; background: rgba(219,114,114,0.14); color: var(--danger, #db7272);">Permission Denied</span>
+        </div>
+        <p style="margin: 0; font-size: 0.78rem; font-family: var(--font-mono); color: var(--muted); word-break: break-all;">/mnt/nas/backup/</p>
+        <span style="font-size: 0.72rem; color: var(--muted);">Authentication expired or mount point offline.</span>
+      </div>
     </div>
   </section>
+
+  <!-- Section 2: Storage Ingress & Local Scanner -->
   <section class="panel">
     <div class="panel-header">
-      <div><p class="eyebrow">automation</p><h3>Zapier / n8n Webhooks</h3></div>
-      <span class="pill pill-neutral">not configured</span>
+      <div>
+        <p class="eyebrow">batch control</p>
+        <h3>Storage Ingress & Local Scanner</h3>
+      </div>
     </div>
-    <p class="muted">Trigger ibal workflows from external automation platforms. Webhook endpoints will be registered here once the integration layer is wired.</p>
+    <p class="muted">Select a storage target path, customize presets, and execute a local discovery sweep to register eligible content assets.</p>
+
+    <!-- Path Selector Controls -->
+    <div style="display: grid; grid-template-columns: 1fr auto; gap: 12px; margin-top: 16px; align-items: end;">
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <label for="ingress-path-input" style="font-size: 0.8rem; font-weight: 600; color: var(--muted);">Ingress Path / Mount Root</label>
+        <div style="display: flex; gap: 8px; width: 100%;">
+          <input type="text" id="ingress-path-input" value="/media/chrishallberg/Storage 22/999_Work/003_Projects/" style="flex: 1; font-size: 0.85rem; padding: 8px 12px; background: var(--panel-strong); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-family: var(--font-mono);" />
+          <select id="ingress-preset-select" style="font-size: 0.85rem; padding: 8px; background: var(--panel-strong); border: 1px solid var(--border); border-radius: 6px; color: var(--text);">
+            <option value="workspace" data-t="workspace">Workspace</option>
+            <option value="cloud">Cloud Sync Cache</option>
+            <option value="backup">Backup Destination</option>
+            <option value="custom">-- Custom Path --</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn btn-primary" id="btn-scan-folder" style="height: 38px;">Scan Folder</button>
+    </div>
   </section>
+
+  <!-- Section 3: Batch Ingress Review Queue -->
+  <section class="panel" id="ingress-queue-panel" style="display: none;">
+    <div class="panel-header">
+      <div>
+        <p class="eyebrow">action queue</p>
+        <h3>Batch Ingress Review Queue</h3>
+      </div>
+      <span class="pill pill-warning" id="ingress-status-pill" style="background: rgba(217,177,93,0.14); color: var(--warn, #d9b15d);">verification pending</span>
+    </div>
+    <p class="muted">Verify file candidates detected during discovery. Ingress processes will normalization-check details before committing.</p>
+
+    <!-- Table of Candidates -->
+    <div style="overflow-x: auto; margin-top: 16px; border: 1px solid var(--border); border-radius: 8px; background: rgba(0,0,0,0.1);">
+      <table style="width: 100%; border-collapse: collapse; font-size: 0.82rem; text-align: left;">
+        <thead>
+          <tr style="border-bottom: 1px solid var(--border); background: rgba(255,255,255,0.02);">
+            <th style="padding: 10px 12px; font-weight: 600; color: var(--muted); border-bottom: 1px solid var(--border);">Title / Resource</th>
+            <th style="padding: 10px 12px; font-weight: 600; color: var(--muted); border-bottom: 1px solid var(--border);">System ID</th>
+            <th style="padding: 10px 12px; font-weight: 600; color: var(--muted); border-bottom: 1px solid var(--border);">Content Path</th>
+            <th style="padding: 10px 12px; font-weight: 600; color: var(--muted); text-align: right; border-bottom: 1px solid var(--border);">Eligibility</th>
+          </tr>
+        </thead>
+        <tbody id="ingress-candidates-body">
+          <!-- Populated by JS -->
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Actions & Feedbacks -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 16px; gap: 12px;">
+      <div id="queue-status-text" style="font-size: 0.82rem; color: var(--muted);">Scan complete: 3 items detected.</div>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn" id="btn-verify-readiness" style="background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: var(--text);">Verify Backup Readiness</button>
+        <button class="btn btn-primary" id="btn-commit-ingress" disabled>Commit Ingress</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Diagnostics Telemetry Logs -->
   <section class="panel">
     <div class="panel-header">
-      <div><p class="eyebrow">calendar</p><h3>Calendar Sync</h3></div>
-      <span class="pill pill-neutral">planned</span>
+      <div>
+        <p class="eyebrow">real-time feedback</p>
+        <h3>Connections Telemetry Activity</h3>
+      </div>
     </div>
-    <p class="muted">Bidirectional calendar sync for task scheduling. Uses the xi-io.net calendar-runtime engine.</p>
+    <p class="muted">Live updates of events committed to the diagnostics ledger and system logs.</p>
+    <div id="telemetry-log" style="height: 120px; overflow-y: auto; background: #000; border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-family: var(--font-mono); font-size: 0.75rem; color: #a1b0b5; display: flex; flex-direction: column; gap: 4px;">
+      <div style="color: var(--muted);">[system] Telemetry session started. Awaiting ingress activity...</div>
+    </div>
   </section>
-  <div class="empty-state">
-    <h3>More connections coming</h3>
-    <p>Each external connection will be manifest-registered and appear here once wired. See the xi-io epic backlog for the integration sprint.</p>
-  </div>
 </div>
