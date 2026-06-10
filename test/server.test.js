@@ -19,6 +19,7 @@ test.before((t, done) => {
     // Set up global mock fetch to intercept Ollama communication
     globalThis.fetch = async (url, options) => {
       const urlStr = url.toString();
+      console.log('MOCK FETCH CALLED FOR:', urlStr);
       if (urlStr.includes('/api/tags')) {
         return {
           status: 200,
@@ -32,6 +33,34 @@ test.before((t, done) => {
               { name: 'mxbai-embed-large' }
             ]
           })
+        };
+      }
+      if (urlStr.includes('/api/chat')) {
+        const encoder = new TextEncoder();
+        const chunks = [
+          JSON.stringify({ message: { role: 'assistant', content: 'Hello' } }) + '\n',
+          JSON.stringify({ message: { role: 'assistant', content: ' there!' } }) + '\n',
+          JSON.stringify({ done: true }) + '\n'
+        ];
+        let chunkIndex = 0;
+        const body = {
+          getReader() {
+            return {
+              async read() {
+                if (chunkIndex < chunks.length) {
+                  const val = chunks[chunkIndex++];
+                  return { done: false, value: encoder.encode(val) };
+                }
+                return { done: true, value: undefined };
+              }
+            };
+          }
+        };
+        return {
+          status: 200,
+          statusText: 'OK',
+          ok: true,
+          body
         };
       }
       if (urlStr.startsWith(testUrl)) {
@@ -380,6 +409,51 @@ test('Socket.io Ingress Scanning & Commit Telemetry Integration', async (t) => {
   assert.strictEqual(evidence.count, commitPayload.count, 'Evidence count must match commit payload');
   assert.strictEqual(evidence.path, targetPath);
   assert.strictEqual(evidence.items[0].title, 'Project Alpha');
+});
+
+test('API Chat Proxy (POST /api/chat) Stream Verification', async (t) => {
+  const res = await originalFetch(`${testUrl}/api/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'llama3:8b',
+      messages: [{ role: 'user', content: 'hello' }],
+      systemPrompt: 'You are helpful.'
+    })
+  });
+
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(res.headers.get('content-type'), 'text/event-stream');
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let receivedText = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    receivedText += decoder.decode(value, { stream: true });
+  }
+
+  // Parse lines starting with "data: "
+  const lines = receivedText.split('\n');
+  const deltas = [];
+  let isDone = false;
+
+  for (const line of lines) {
+    if (line.startsWith('data: ')) {
+      const parsed = JSON.parse(line.substring(6));
+      if (parsed.delta) {
+        deltas.push(parsed.delta);
+      }
+      if (parsed.done) {
+        isDone = true;
+      }
+    }
+  }
+
+  assert.deepStrictEqual(deltas, ['Hello', ' there!']);
+  assert.strictEqual(isDone, true);
 });
 
 

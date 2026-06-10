@@ -39,6 +39,7 @@ async function navigate(routeKey) {
     pageModuleCleanup();
     pageModuleCleanup = null;
   }
+  window.activePageModule = null;
 
   // Show loading state
   contentArea.innerHTML = '<div class="page-loading"><div class="spinner-ring"></div><p>Loading…</p></div>';
@@ -77,11 +78,12 @@ async function navigate(routeKey) {
   if (PAGE_MODULES[routeKey]) {
     try {
       const mod = await import(`./${PAGE_MODULES[routeKey]}`);
+      window.activePageModule = mod;
       if (typeof mod.init === 'function') {
         pageModuleCleanup = mod.init() || null;
       }
-    } catch {
-      // Page module not yet built — silently skip
+    } catch (err) {
+      console.error(`[Router] Failed to load module for route ${routeKey}:`, err);
     }
   }
 

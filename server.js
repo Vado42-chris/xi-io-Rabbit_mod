@@ -951,6 +951,99 @@ app.post('/api/ollama/self-heal', async (req, res) => {
   }
 });
 
+app.post('/api/chat', async (req, res) => {
+  const { model, messages, systemPrompt } = req.body;
+  if (!messages || !Array.isArray(messages)) {
+    return res.status(400).json({ error: 'Invalid or missing messages array.' });
+  }
+
+  // Prepend system prompt if provided
+  const requestMessages = [];
+  if (systemPrompt) {
+    requestMessages.push({ role: 'system', content: systemPrompt });
+  }
+  requestMessages.push(...messages);
+
+  console.log(`[Proxy Chat] Routing request for model [${model || 'llama3'}] with ${requestMessages.length} messages.`);
+  
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  let clientClosed = false;
+  res.on('close', () => {
+    if (!res.writableEnded) {
+      clientClosed = true;
+    }
+  });
+
+  try {
+    const response = await fetch(`${OLLAMA_HOST}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: model || 'llama3',
+        messages: requestMessages,
+        stream: true
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      res.write(`data: ${JSON.stringify({ error: `Ollama error: ${response.statusText} (${errText})`, done: true })}\n\n`);
+      return res.end();
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (!clientClosed) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (line.trim() === '') continue;
+        try {
+          const parsed = JSON.parse(line);
+          if (parsed.message && parsed.message.content) {
+            res.write(`data: ${JSON.stringify({ delta: parsed.message.content, done: false })}\n\n`);
+          }
+        } catch (err) {
+          console.error('[Proxy Chat] Error parsing line:', line, err);
+        }
+      }
+    }
+
+    if (!clientClosed && buffer.trim() !== '') {
+      try {
+        const parsed = JSON.parse(buffer);
+        if (parsed.message && parsed.message.content) {
+          res.write(`data: ${JSON.stringify({ delta: parsed.message.content, done: false })}\n\n`);
+        }
+      } catch (err) {
+        // ignore
+      }
+    }
+
+    if (!clientClosed) {
+      res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+    }
+    res.end();
+
+  } catch (err) {
+    console.error('[Proxy Chat] Failed communicating with Ollama:', err);
+    if (!clientClosed) {
+      res.write(`data: ${JSON.stringify({ error: `Connection to local model failed: ${err.message}`, done: true })}\n\n`);
+    }
+    res.end();
+  }
+});
+
 const isTestEnv = process.env.NODE_ENV === 'test' || 
                   process.execArgv.includes('--test') || 
                   (require.main && require.main.filename && require.main.filename.includes('test'));

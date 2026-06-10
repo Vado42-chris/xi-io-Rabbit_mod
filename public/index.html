@@ -42,6 +42,11 @@
         <span id="eco-dot" class="eco-dot"></span>
         <span id="eco-count">0 connected</span>
       </div>
+      <button id="ibal-chat-trigger" class="icon-btn" aria-label="Toggle Ibal Chat" title="Toggle Ibal Chat (Ctrl+Shift+I)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+        </svg>
+      </button>
       <button id="preview-toggle-btn" class="preview-toggle-btn" aria-label="Toggle device preview" title="Toggle device preview">
         <span id="preview-toggle-icon" aria-hidden="true">◀</span>
         <span class="preview-toggle-label">Preview</span>
@@ -161,6 +166,46 @@
       </div>
     </aside>
 
+    <!-- ── IBAL CHAT DRAWER ────────────────────────────────────── -->
+    <aside id="ibal-chat-drawer" class="chat-drawer hidden" role="dialog" aria-label="Ibal Assistant" aria-modal="true">
+      <div class="chat-drawer-header">
+        <div class="chat-drawer-title-area">
+          <span class="chat-icon" aria-hidden="true">🤖</span>
+          <h3 class="chat-drawer-title">Ibal Assistant</h3>
+        </div>
+        <div class="chat-drawer-header-actions">
+          <button id="ibal-chat-close-btn" class="icon-btn" aria-label="Close Ibal Assistant">✕</button>
+        </div>
+      </div>
+      
+      <div class="chat-drawer-context-banner" id="ibal-chat-context-banner">
+        <span class="context-label" id="ibal-chat-context-text">Context: Global</span>
+      </div>
+
+      <div class="chat-drawer-body">
+        <div class="chat-messages" id="ibal-chat-messages" role="log" aria-live="polite">
+          <div class="chat-message system">
+            <p>Hello! I am Ibal, your AI assistant. How can I help you manage your ecosystem operator console today?</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="chat-drawer-footer">
+        <form id="ibal-chat-form" class="chat-input-form">
+          <textarea id="ibal-chat-input" class="chat-input-textarea" placeholder="Message Ibal..." aria-label="Message Ibal" rows="1" required></textarea>
+          <button type="submit" id="ibal-chat-send-btn" class="button button-primary chat-send-btn" aria-label="Send message">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+          </button>
+        </form>
+        <div class="chat-drawer-footer-meta">
+          Model: <span id="ibal-chat-model-indicator">unknown</span>
+        </div>
+      </div>
+    </aside>
+
   </div><!-- /#main-layout -->
 </div><!-- /#app-shell -->
 
@@ -194,5 +239,6 @@
 <script src="router.js"></script>
 <script src="viewport-preview.js"></script>
 <script src="app.js"></script>
+<script type="module" src="js/ibal-chat.js"></script>
 </body>
 </html>

@@ -54,6 +54,29 @@
   <section class="panel">
     <div class="panel-header">
       <div>
+        <p class="eyebrow">framework integration</p>
+        <h3>Framework Integration Hooks</h3>
+      </div>
+    </div>
+    <div class="hook-health-details" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: 8px;">
+      <div>
+        <p class="muted" style="margin: 0; font-size: 0.8rem;">Status</p>
+        <strong id="hook-health-status" style="font-size: 1.1rem; color: var(--accent);">—</strong>
+      </div>
+      <div>
+        <p class="muted" style="margin: 0; font-size: 0.8rem;">Hook Count</p>
+        <strong id="hook-health-count" style="font-size: 1.1rem; color: var(--text);">—</strong>
+      </div>
+      <div style="grid-column: 1 / -1;">
+        <p class="muted" style="margin: 0; font-size: 0.8rem;">Note</p>
+        <span id="hook-health-note" class="muted" style="font-size: 0.85rem; display: block; margin-top: 4px;">—</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-header">
+      <div>
         <p class="eyebrow">recovery</p>
         <h3>Self-Healing Controls</h3>
       </div>

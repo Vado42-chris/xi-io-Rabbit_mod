@@ -1,3 +1,5 @@
+import { getHookHealth } from './framework-hooks.js';
+
 /**
  * Page module for Diagnostics
  */
@@ -13,6 +15,30 @@ export function init() {
   const runHealBtn = document.getElementById('run-heal-diag-btn');
   const healOllamaBtn = document.getElementById('diag-heal-ollama-btn');
   const simulateBtn = document.getElementById('diag-simulate-ingress-btn');
+
+  // Populate framework integration hook status
+  const hookStatusEl = document.getElementById('hook-health-status');
+  const hookCountEl = document.getElementById('hook-health-count');
+  const hookNoteEl = document.getElementById('hook-health-note');
+
+  if (hookStatusEl && hookCountEl && hookNoteEl) {
+    try {
+      const health = getHookHealth();
+      hookStatusEl.textContent = health.status;
+      hookCountEl.textContent = `${health.configured ? health.hookCount : 0} / ${health.hookCount}`;
+      hookNoteEl.textContent = health.note;
+      
+      if (health.status === 'OK') {
+        hookStatusEl.style.color = 'var(--ok, #6fd6ad)';
+      } else if (health.status === 'PENDING_BACKEND') {
+        hookStatusEl.style.color = 'var(--accent, #ff5722)';
+      } else {
+        hookStatusEl.style.color = 'var(--muted, #96a5aa)';
+      }
+    } catch (err) {
+      console.error('[Diagnostics] Failed to load hook health:', err);
+    }
+  }
 
   let allLogs = [];
 
@@ -209,5 +235,20 @@ export function init() {
     if (simulateBtn) simulateBtn.removeEventListener('click', onSimulateClick);
     if (clearBtn) clearBtn.removeEventListener('click', onClearClick);
     if (logFilter) logFilter.removeEventListener('change', renderLogs);
+  };
+}
+
+/**
+ * Collect page-specific diagnostics context.
+ */
+export function getContext() {
+  return {
+    selection: null,
+    diagnostic: {
+      ollamaStatus: document.getElementById('diag-ollama')?.textContent || 'unknown',
+      cpuUsage: document.getElementById('diag-cpu')?.textContent || 'unknown',
+      memoryUsed: document.getElementById('diag-mem')?.textContent || 'unknown',
+      uptime: document.getElementById('diag-uptime')?.textContent || 'unknown'
+    }
   };
 }
