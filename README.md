@@ -34,7 +34,7 @@ graph TD
     Browser[Frontend App: app.js / index.html] -->|WebSockets / Socket.io| Express[Local Node.js Server: server.js]
     Browser -->|Direct Fetch / Stream| Ollama[Ollama Daemon: http://localhost:11434]
     Express -->|os System Call| SystemStats[Node.js Telemetry]
-    Express -->|File System| TasksJSON[tasks.json Database]
+    Express -->|File System| TasksJSON[tasks.jsonl Database]
     Browser -->|Web Audio / Dictation| SpeechAPI[Native Web Speech API]
 ```
 

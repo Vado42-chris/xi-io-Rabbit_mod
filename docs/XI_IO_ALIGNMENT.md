@@ -21,7 +21,7 @@ Data entering the runtime container originates from:
 - **Human Controls**: Keydown actions (`ArrowUp`, `ArrowDown`, `Enter`), PTT clicks, and manual scroll wheel ticks.
 - **Client Sensors**: Video camera frame snapshots (as JPEG base64 strings) and browser Web Speech voice dictation strings.
 - **Workflow Interventions**: Manual Kanban board dragging, text submissions for new tasks, or model pulling commands.
-- **Workstation Inputs**: Node.js telemetry stats (`os` module outputs) and `tasks.json` file reads.
+- **Workstation Inputs**: Node.js telemetry stats (`os` module outputs) and `tasks.jsonl` file reads.
 
 ### 2. Analysis
 Processing layers evaluate ingress data:
