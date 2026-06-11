@@ -574,6 +574,15 @@ function writeProposals(proposals) {
 }
 
 // Helpers for reading/writing tasks
+/**
+ * Collapses the append-only JSONL task log file into the current list of active tasks.
+ * Design considerations:
+ * - Read path: Parses the file line-by-line to construct the current task list.
+ * - Tombstones: Lines matching `{ "id": "...", "deleted": true }` remove the task from the collapsed map.
+ * - State reconciliation: Properties of later updates are merged with existing records for the same taskId.
+ * 
+ * @returns {Array<Object>} List of collapsed, active (non-deleted) task objects.
+ */
 function readTasks() {
   try {
     if (!fs.existsSync(TASKS_FILE)) {
@@ -589,14 +598,16 @@ function readTasks() {
         if (task.id) {
           const taskIdStr = String(task.id);
           if (task.deleted) {
+            // Tombstone record: remove the task from memory
             tasksMap.delete(taskIdStr);
           } else {
+            // Apply updates incrementally to preserve previous fields
             const existing = tasksMap.get(taskIdStr) || {};
             tasksMap.set(taskIdStr, { ...existing, ...task });
           }
         }
       } catch (e) {
-        // ignore malformed lines
+        // Gracefully ignore malformed or partially written lines to prevent data corruption crashes
       }
     }
     return Array.from(tasksMap.values());
@@ -615,6 +626,17 @@ function readTasks() {
   }
 }
 
+/**
+ * Reconciles the provided task list against the existing task file on disk.
+ * Only appends the delta (new, updated, or deleted tasks) to the append-only JSONL log.
+ * 
+ * Design considerations:
+ * - New tasks: Appended to the log as new task entries.
+ * - Updated tasks: Only appended if there is a real difference in properties compared to the current collapsed state.
+ * - Deleted tasks: A tombstone entry `{ "id": "...", "deleted": true }` is appended.
+ * 
+ * @param {Array<Object>} tasks - The proposed target list of tasks.
+ */
 function writeTasks(tasks) {
   try {
     const currentTasks = readTasks();
@@ -623,7 +645,7 @@ function writeTasks(tasks) {
 
     const appends = [];
 
-    // Find new or updated tasks
+    // Find new or updated tasks compared to our current collapsed state
     for (const [id, newTask] of newMap.entries()) {
       const currentTask = currentMap.get(id);
       if (!currentTask) {
@@ -643,7 +665,7 @@ function writeTasks(tasks) {
       }
     }
 
-    // Find deleted tasks
+    // Find deleted tasks and append tombstone records
     for (const [id, currentTask] of currentMap.entries()) {
       if (!newMap.has(id)) {
         appends.push({ id: currentTask.id, deleted: true });
@@ -1757,6 +1779,9 @@ io.on('connection', (socket) => {
   });
 
   // Handle task deletion (HITL Approval Gate)
+  // Security Constraint: Immediate file I/O deletions are prohibited.
+  // When a user requests a task deletion, the action is intercepted and wrapped
+  // into an action proposal that must be manually approved via the inbox interface.
   socket.on('delete-task', (payload) => {
     const taskId = (payload && typeof payload === 'object' && payload.hasOwnProperty('id')) ? payload.id : payload;
     const tasks = readTasks();
