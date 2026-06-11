@@ -7,4 +7,6 @@ data/
 inbox.json
 proposals.json
 tasks.json
+tasks.jsonl
+*.bak
 events.jsonl

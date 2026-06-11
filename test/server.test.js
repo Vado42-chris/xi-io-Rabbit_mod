@@ -456,4 +456,178 @@ test('API Chat Proxy (POST /api/chat) Stream Verification', async (t) => {
   assert.strictEqual(isDone, true);
 });
 
+test('Socket.io Task Lifecycle & HITL Deletion Gate Integration', async (t) => {
+  const path = require('path');
+  const TASKS_FILE = path.join(__dirname, '../tasks.jsonl');
+  const PROPOSALS_FILE = path.join(__dirname, '../proposals.json');
+
+  // Back up existing tasks and proposals files
+  const tasksBackup = fs.existsSync(TASKS_FILE) ? fs.readFileSync(TASKS_FILE) : null;
+  const proposalsBackup = fs.existsSync(PROPOSALS_FILE) ? fs.readFileSync(PROPOSALS_FILE) : null;
+  const originalIoEmit = io.emit;
+
+  t.after(() => {
+    io.emit = originalIoEmit;
+
+    // Restore backup
+    if (tasksBackup !== null) {
+      fs.writeFileSync(TASKS_FILE, tasksBackup);
+    } else if (fs.existsSync(TASKS_FILE)) {
+      try { fs.unlinkSync(TASKS_FILE); } catch (e) {}
+    }
+
+    if (proposalsBackup !== null) {
+      fs.writeFileSync(PROPOSALS_FILE, proposalsBackup);
+    } else if (fs.existsSync(PROPOSALS_FILE)) {
+      try { fs.unlinkSync(PROPOSALS_FILE); } catch (e) {}
+    }
+  });
+
+  let emittedTasks = null;
+  let emittedInboxState = null;
+
+  // Intercept io.emit to capture broadcasts
+  io.emit = (event, data) => {
+    if (event === 'tasks') {
+      emittedTasks = data;
+    } else if (event === 'inbox-state') {
+      emittedInboxState = data;
+    }
+    return originalIoEmit.call(io, event, data);
+  };
+
+  // Clear files for the test
+  fs.writeFileSync(TASKS_FILE, '');
+  fs.writeFileSync(PROPOSALS_FILE, JSON.stringify([], null, 2));
+
+  // Get socket listeners
+  const connectionListeners = io.listeners('connection');
+  assert.ok(connectionListeners.length > 0, 'Should have at least one socket connection listener');
+  const onConnection = connectionListeners[0];
+
+  // Create mock socket
+  const mockSocket = {
+    id: 'test-tasks-socket-id',
+    events: {},
+    emit(event, data) {
+      if (event === 'tasks') {
+        emittedTasks = data;
+      } else if (event === 'inbox-state') {
+        emittedInboxState = data;
+      }
+    },
+    on(event, callback) {
+      this.events[event] = callback;
+    },
+    off(event, callback) {
+      delete this.events[event];
+    }
+  };
+
+  // Trigger connection
+  onConnection(mockSocket);
+
+  // Assert events are registered
+  assert.ok(mockSocket.events['fetch-tasks']);
+  assert.ok(mockSocket.events['create-task']);
+  assert.ok(mockSocket.events['toggle-task']);
+  assert.ok(mockSocket.events['update-task-status']);
+  assert.ok(mockSocket.events['delete-task']);
+  assert.ok(mockSocket.events['approve-proposal']);
+
+  // 1. Create a task
+  mockSocket.events['create-task']('Test Socket Task');
+
+  // Verify task was added to tasks.jsonl and broadcasted
+  assert.ok(emittedTasks, 'Should emit tasks on creation');
+  assert.strictEqual(emittedTasks.length, 1);
+  assert.strictEqual(emittedTasks[0].text, 'Test Socket Task');
+  assert.strictEqual(emittedTasks[0].completed, false);
+  assert.strictEqual(emittedTasks[0].status, 'todo');
+  
+  const createdTaskId = emittedTasks[0].id;
+  assert.ok(createdTaskId, 'Task should have an ID');
+
+  // Verify file has the line
+  const lines = fs.readFileSync(TASKS_FILE, 'utf8').trim().split('\n');
+  assert.strictEqual(lines.length, 1);
+  const parsedTask = JSON.parse(lines[0]);
+  assert.strictEqual(parsedTask.text, 'Test Socket Task');
+
+  // Reset helper check variables
+  emittedTasks = null;
+
+  // 2. Toggle the task
+  mockSocket.events['toggle-task']({ id: createdTaskId });
+
+  assert.ok(emittedTasks, 'Should emit tasks on toggle');
+  assert.strictEqual(emittedTasks.length, 1);
+  assert.strictEqual(emittedTasks[0].completed, true);
+  assert.strictEqual(emittedTasks[0].status, 'done');
+
+  // Verify JSONL append
+  const linesAfterToggle = fs.readFileSync(TASKS_FILE, 'utf8').trim().split('\n');
+  assert.strictEqual(linesAfterToggle.length, 2);
+  const parsedToggle = JSON.parse(linesAfterToggle[1]);
+  assert.strictEqual(parsedToggle.id, createdTaskId);
+  assert.strictEqual(parsedToggle.completed, true);
+
+  // Reset helper check variables
+  emittedTasks = null;
+
+  // 3. Update task status (Kanban update)
+  mockSocket.events['update-task-status']({ taskId: createdTaskId, status: 'in-progress' });
+
+  assert.ok(emittedTasks, 'Should emit tasks on status update');
+  assert.strictEqual(emittedTasks.length, 1);
+  assert.strictEqual(emittedTasks[0].completed, false);
+  assert.strictEqual(emittedTasks[0].status, 'in-progress');
+
+  // Reset helper check variables
+  emittedTasks = null;
+
+  // 4. Delete task (should generate proposal, NOT delete immediately)
+  mockSocket.events['delete-task']({ id: createdTaskId });
+
+  // Verify task is NOT deleted from task file yet
+  const linesAfterDeleteRequest = fs.readFileSync(TASKS_FILE, 'utf8').trim().split('\n');
+  assert.strictEqual(linesAfterDeleteRequest.length, 3); // no new delete tombstone
+  
+  // Verify proposal generated
+  assert.ok(emittedInboxState, 'Should emit inbox-state on delete-task');
+  assert.strictEqual(emittedInboxState.proposals.length, 1);
+  const proposal = emittedInboxState.proposals[0];
+  assert.strictEqual(proposal.suggested_action, 'delete_task');
+  assert.strictEqual(proposal.status, 'pending');
+  assert.strictEqual(String(proposal.parameters.taskId), String(createdTaskId));
+
+  // Verify written to proposals.json
+  const proposalsFromFile = JSON.parse(fs.readFileSync(PROPOSALS_FILE, 'utf8'));
+  assert.strictEqual(proposalsFromFile.length, 1);
+  assert.strictEqual(proposalsFromFile[0].id, proposal.id);
+
+  // Reset helper check variables
+  emittedInboxState = null;
+  emittedTasks = null;
+
+  // 5. Approve proposal
+  mockSocket.events['approve-proposal']({ id: proposal.id });
+
+  // Verify task was deleted (a tombstone should be appended, reducing active task list to 0)
+  assert.ok(emittedTasks, 'Should emit tasks on approval');
+  assert.strictEqual(emittedTasks.length, 0);
+
+  const linesAfterApproval = fs.readFileSync(TASKS_FILE, 'utf8').trim().split('\n');
+  assert.strictEqual(linesAfterApproval.length, 4); // should have 4 lines now
+  const parsedTombstone = JSON.parse(linesAfterApproval[3]);
+  assert.strictEqual(parsedTombstone.id, createdTaskId);
+  assert.strictEqual(parsedTombstone.deleted, true);
+
+  // Verify proposal is marked approved
+  assert.ok(emittedInboxState);
+  assert.strictEqual(emittedInboxState.proposals.length, 1);
+  assert.strictEqual(emittedInboxState.proposals[0].status, 'approved');
+});
+
+
 

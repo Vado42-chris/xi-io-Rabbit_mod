@@ -83,7 +83,7 @@ app.get('/device/*', (req, res) => {
 });
 
 // Path to tasks storage
-const TASKS_FILE = path.join(__dirname, 'tasks.json');
+const TASKS_FILE = path.join(__dirname, 'tasks.jsonl');
 const INBOX_FILE = path.join(__dirname, 'inbox.json');
 const PROPOSALS_FILE = path.join(__dirname, 'proposals.json');
 const DIAGNOSTICS_FILE = path.join(__dirname, 'data', 'diagnostics.jsonl');
@@ -433,7 +433,7 @@ function classifyModelCapabilities(modelName) {
   return caps;
 }
 
-// Initialize tasks.json if it doesn't exist
+// Initialize tasks.jsonl if it doesn't exist
 if (!fs.existsSync(TASKS_FILE)) {
   const initialTasks = [
     { id: 1, text: "Design xi-io.net workspace dashboard", completed: false, project: "xi-io.net" },
@@ -441,9 +441,10 @@ if (!fs.existsSync(TASKS_FILE)) {
     { id: 3, text: "Verify local Ollama offline assistant capabilities", completed: false, project: "xi-io.net" }
   ];
   try {
-    fs.writeFileSync(TASKS_FILE, JSON.stringify(initialTasks, null, 2));
+    const lines = initialTasks.map(t => JSON.stringify(t)).join('\n') + '\n';
+    fs.writeFileSync(TASKS_FILE, lines, 'utf8');
   } catch (err) {
-    console.error("Failed to initialize tasks.json:", err);
+    console.error("Failed to initialize tasks.jsonl:", err);
   }
 }
 
@@ -575,8 +576,30 @@ function writeProposals(proposals) {
 // Helpers for reading/writing tasks
 function readTasks() {
   try {
+    if (!fs.existsSync(TASKS_FILE)) {
+      return [];
+    }
     const data = fs.readFileSync(TASKS_FILE, 'utf8');
-    return JSON.parse(data);
+    const lines = data.split('\n');
+    const tasksMap = new Map();
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const task = JSON.parse(line);
+        if (task.id) {
+          const taskIdStr = String(task.id);
+          if (task.deleted) {
+            tasksMap.delete(taskIdStr);
+          } else {
+            const existing = tasksMap.get(taskIdStr) || {};
+            tasksMap.set(taskIdStr, { ...existing, ...task });
+          }
+        }
+      } catch (e) {
+        // ignore malformed lines
+      }
+    }
+    return Array.from(tasksMap.values());
   } catch (err) {
     console.error("Error reading tasks:", err);
     recordDiagnostic(
@@ -585,7 +608,7 @@ function readTasks() {
       'TASK_PERSISTENCE_FAILED',
       'Failed to read tasks database file.',
       err.message,
-      'Ensure the directory has read permissions and that tasks.json is valid JSON.',
+      'Ensure the directory has read permissions and that tasks.jsonl is valid.',
       'tasks'
     );
     return [];
@@ -594,7 +617,43 @@ function readTasks() {
 
 function writeTasks(tasks) {
   try {
-    fs.writeFileSync(TASKS_FILE, JSON.stringify(tasks, null, 2));
+    const currentTasks = readTasks();
+    const currentMap = new Map(currentTasks.map(t => [String(t.id), t]));
+    const newMap = new Map(tasks.map(t => [String(t.id), t]));
+
+    const appends = [];
+
+    // Find new or updated tasks
+    for (const [id, newTask] of newMap.entries()) {
+      const currentTask = currentMap.get(id);
+      if (!currentTask) {
+        appends.push(newTask);
+      } else {
+        const keys = new Set([...Object.keys(newTask), ...Object.keys(currentTask)]);
+        let isChanged = false;
+        for (const key of keys) {
+          if (newTask[key] !== currentTask[key]) {
+            isChanged = true;
+            break;
+          }
+        }
+        if (isChanged) {
+          appends.push(newTask);
+        }
+      }
+    }
+
+    // Find deleted tasks
+    for (const [id, currentTask] of currentMap.entries()) {
+      if (!newMap.has(id)) {
+        appends.push({ id: currentTask.id, deleted: true });
+      }
+    }
+
+    if (appends.length > 0) {
+      const lines = appends.map(t => JSON.stringify(t)).join('\n') + '\n';
+      fs.appendFileSync(TASKS_FILE, lines, 'utf8');
+    }
   } catch (err) {
     console.error("Error writing tasks:", err);
     recordDiagnostic(
@@ -1484,8 +1543,9 @@ io.on('connection', (socket) => {
   });
 
   // Handle action proposal approval
-  socket.on('approve-proposal', (proposalId) => {
+  socket.on('approve-proposal', (payload) => {
     try {
+      const proposalId = (payload && typeof payload === 'object' && payload.hasOwnProperty('id')) ? payload.id : payload;
       const proposals = readProposals();
       const index = proposals.findIndex(p => String(p.id) === String(proposalId));
       if (index !== -1) {
@@ -1509,6 +1569,16 @@ io.on('connection', (socket) => {
           writeTasks(tasks);
           io.emit('tasks', tasks);
           recordLedgerEvent('task.created', { taskId: newTask.id, text: newTask.text });
+        } else if (proposal.suggested_action === 'delete_task') {
+          const targetTaskId = proposal.parameters.taskId;
+          if (targetTaskId) {
+            let tasks = readTasks();
+            tasks = tasks.filter(t => String(t.id) !== String(targetTaskId));
+            writeTasks(tasks);
+            io.emit('tasks', tasks);
+            recordLedgerEvent('task.deleted', { taskId: targetTaskId });
+            console.log(`Task ${targetTaskId} deleted via proposal approval`);
+          }
         }
 
         io.emit('inbox-state', { events: readInbox(), proposals: proposals });
@@ -1519,8 +1589,9 @@ io.on('connection', (socket) => {
   });
 
   // Handle action proposal rejection
-  socket.on('reject-proposal', (proposalId) => {
+  socket.on('reject-proposal', (payload) => {
     try {
+      const proposalId = (payload && typeof payload === 'object' && payload.hasOwnProperty('id')) ? payload.id : payload;
       const proposals = readProposals();
       const index = proposals.findIndex(p => String(p.id) === String(proposalId));
       if (index !== -1) {
@@ -1654,7 +1725,8 @@ io.on('connection', (socket) => {
   });
 
   // Handle task toggle
-  socket.on('toggle-task', (taskId) => {
+  socket.on('toggle-task', (payload) => {
+    const taskId = (payload && typeof payload === 'object' && payload.hasOwnProperty('id')) ? payload.id : payload;
     const tasks = readTasks();
     const taskIndex = tasks.findIndex(t => String(t.id) === String(taskId));
     if (taskIndex !== -1) {
@@ -1669,10 +1741,12 @@ io.on('connection', (socket) => {
   });
 
   // Handle task status update (Kanban drag-and-drop)
-  socket.on('update-task-status', ({ taskId, status }) => {
+  socket.on('update-task-status', (payload) => {
+    const taskId = (payload && typeof payload === 'object' && payload.hasOwnProperty('taskId')) ? payload.taskId : (payload && payload.id) || payload;
+    const status = payload && payload.status;
     const tasks = readTasks();
     const taskIndex = tasks.findIndex(t => String(t.id) === String(taskId));
-    if (taskIndex !== -1) {
+    if (taskIndex !== -1 && status) {
       tasks[taskIndex].status = status;
       tasks[taskIndex].completed = (status === 'done');
       writeTasks(tasks);
@@ -1682,14 +1756,45 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Handle task deletion
-  socket.on('delete-task', (taskId) => {
-    let tasks = readTasks();
-    tasks = tasks.filter(t => String(t.id) !== String(taskId));
-    writeTasks(tasks);
-    io.emit('tasks', tasks);
-    recordLedgerEvent('task.deleted', { taskId: taskId });
-    console.log(`Task ${taskId} deleted`);
+  // Handle task deletion (HITL Approval Gate)
+  socket.on('delete-task', (payload) => {
+    const taskId = (payload && typeof payload === 'object' && payload.hasOwnProperty('id')) ? payload.id : payload;
+    const tasks = readTasks();
+    const task = tasks.find(t => String(t.id) === String(taskId));
+    if (!task) return;
+
+    // Create an action proposal for human-in-the-loop (HITL) approval
+    const proposalId = `prop_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const proposal = {
+      id: proposalId,
+      proposal_type: "automation",
+      source_event_ids: [String(taskId)],
+      title: `Delete Task: "${task.text || task.title || 'Untitled Task'}"`,
+      requires_user_confirmation: true,
+      egress_risk: "medium",
+      created_at: new Date().toISOString(),
+      suggested_action: "delete_task",
+      parameters: {
+        taskId: task.id
+      },
+      confidence: 1.0,
+      status: "pending"
+    };
+
+    const proposalValidation = validateActionProposal(proposal);
+    if (!proposalValidation.valid) {
+      console.error("Delete task proposal validation failed:", proposalValidation.errors);
+      recordDiagnostic('error', 'server.inbox', 'PROPOSAL_VALIDATION_FAILED', 'Proposal validation failed.', proposalValidation.errors.join('; '), 'Ensure the model output satisfies constraints.', 'inbox');
+    } else {
+      const proposals = readProposals();
+      proposals.push(proposal);
+      writeProposals(proposals);
+      recordLedgerEvent('proposal.generated', proposal);
+      
+      // Broadcast updated inbox/proposals state to all connected socket clients
+      io.emit('inbox-state', { events: readInbox(), proposals: proposals });
+      console.log(`Task deletion for ${taskId} intercepted; proposal ${proposalId} generated.`);
+    }
   });
 
   // Handle Ollama voice/text chat prompt (Streaming)
